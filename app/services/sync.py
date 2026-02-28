@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -20,6 +20,7 @@ def sync_course(course_id):
     """
     client = CanvasClient()
     events = []
+    cutoff = datetime.now(timezone.utc) - timedelta(days=21)
 
     yield {'status': 'fetching', 'item': 'enrollments'}
     enrollments = client.get_enrollments(course_id)
@@ -33,7 +34,7 @@ def sync_course(course_id):
     # scope=sent means messages the instructor sent; participants includes all
     # people in the thread.  We record one event per enrolled student per convo.
     yield {'status': 'fetching', 'item': 'conversations'}
-    conversations = client.get_conversations()
+    conversations = client.get_conversations(since=cutoff)
 
     for i, conv in enumerate(conversations, 1):
         yield {'status': 'reading', 'item': f'conversation {i}'}
@@ -61,22 +62,24 @@ def sync_course(course_id):
 
         yield {'status': 'reading', 'item': f'discussion {i}'}
         for entry in entries:
-            if entry.get('user_id') in student_ids:
+            entry_at = datetime.fromisoformat(entry['created_at'])
+            if entry_at >= cutoff and entry.get('user_id') in student_ids:
                 events.append({
                     'course_id': course_id,
                     'student_canvas_id': entry['user_id'],
                     'event_type': 'discussion_entry',
-                    'occurred_at': datetime.fromisoformat(entry['created_at']),
+                    'occurred_at': entry_at,
                     'source_id': entry['id'],
                 })
             # TODO: recurse into full reply threads (not just recent_replies)
             for reply in entry.get('recent_replies', []):
-                if reply.get('user_id') in student_ids:
+                reply_at = datetime.fromisoformat(reply['created_at'])
+                if reply_at >= cutoff and reply.get('user_id') in student_ids:
                     events.append({
                         'course_id': course_id,
                         'student_canvas_id': reply['user_id'],
                         'event_type': 'discussion_reply',
-                        'occurred_at': datetime.fromisoformat(reply['created_at']),
+                        'occurred_at': reply_at,
                         'source_id': reply['id'],
                     })
 

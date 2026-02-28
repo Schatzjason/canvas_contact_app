@@ -144,11 +144,14 @@ class CanvasClient:
             ttl=TTL_ENROLLMENTS,
         )
 
-    def get_conversations(self):
-        """All sent conversations (cached 15 min)."""
+    def get_conversations(self, since=None):
+        """Sent conversations (cached 15 min). Pass a UTC datetime to filter by start_time."""
+        params = {'scope': 'sent'}
+        if since is not None:
+            params['start_time'] = since.strftime('%Y-%m-%dT%H:%M:%SZ')
         return self._get_all_pages(
             '/api/v1/conversations',
-            params={'scope': 'sent'},
+            params=params,
             ttl=TTL_CONVERSATIONS,
         )
 
