@@ -21,6 +21,8 @@ def create_app():
     db.init_app(app)
     migrate.init_app(app, db)
 
+    from app.models import canvas_cache, interaction_event  # noqa: F401
+
     from app.routes import dashboard
     app.register_blueprint(dashboard.bp)
 
