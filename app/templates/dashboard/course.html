@@ -3,7 +3,12 @@
 
 {% block extra_styles %}
   h1 { font-size: 1.3rem; margin-bottom: 0.25rem; }
-  .course-code { color: #777; font-size: 0.85rem; margin-bottom: 1.5rem; }
+  .course-code { color: #777; font-size: 0.85rem; margin-bottom: 1rem; }
+  .btn-flush {
+    font-size: 0.75rem; color: #999; background: none; border: 1px solid #ddd;
+    border-radius: 4px; padding: 0.2rem 0.6rem; cursor: pointer; margin-bottom: 1.25rem;
+  }
+  .btn-flush:hover { color: #c0392b; border-color: #c0392b; }
 
   .timeline-wrap { overflow-x: auto; }
 
@@ -52,6 +57,10 @@
 {% block content %}
 <h1>{{ course.name }}</h1>
 <div class="course-code">{{ course.course_code }}</div>
+
+<form method="post" action="{{ url_for('dashboard.flush_cache', course_id=course.id) }}">
+  <button class="btn-flush" type="submit">↺ flush cache</button>
+</form>
 
 <div class="legend">
   <div class="legend-item"><div class="legend-swatch swatch-green"></div> Interacted within {{ config.STALE_WARN_DAYS }} days</div>

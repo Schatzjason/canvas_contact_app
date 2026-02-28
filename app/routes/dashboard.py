@@ -4,7 +4,10 @@ from datetime import date, datetime, time, timedelta, timezone
 from flask import Blueprint, Response, current_app, flash, render_template, stream_with_context
 from sqlalchemy import func
 
+from flask import redirect, url_for
+
 from app import db
+from app.models.canvas_cache import CanvasCache
 from app.models.interaction_event import InteractionEvent
 from app.services.canvas_client import CanvasClient
 from app.services.sync import run_sync, sync_course
@@ -21,6 +24,15 @@ def index():
         flash(f'Could not load courses from Canvas: {exc}')
         courses = []
     return render_template('dashboard/index.html', courses=courses)
+
+
+@bp.route('/course/<int:course_id>/flush-cache', methods=['POST'])
+def flush_cache(course_id):
+    """Dev tool: delete all cached Canvas API responses and redirect to index."""
+    deleted = db.session.query(CanvasCache).delete()
+    db.session.commit()
+    flash(f'Cache cleared ({deleted} entries). Reload a course to re-sync.')
+    return redirect(url_for('dashboard.index'))
 
 
 @bp.route('/course/<int:course_id>/sync')
