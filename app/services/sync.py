@@ -8,29 +8,35 @@ from app.services.canvas_client import CanvasClient
 
 
 def sync_course(course_id):
-    """Pull Canvas data for course_id and upsert into interaction_event.
+    """Generator that syncs Canvas data for course_id into interaction_event.
+
+    Yields progress dicts: {'status': 'fetching'|'reading'|'saving'|'done', 'item': str}
+    The final dict has status='done' and a 'count' key with the number of events upserted.
 
     Aggregates from:
       - Sent conversations (participants matched against enrolled students)
       - Discussion entries authored by students
       - recent_replies on those entries authored by students
-
-    Returns the number of event rows processed.
     """
     client = CanvasClient()
     events = []
 
-    # Enrolled student IDs — used to filter Canvas objects down to students only
+    yield {'status': 'fetching', 'item': 'enrollments'}
     enrollments = client.get_enrollments(course_id)
     student_ids = {e['user_id'] for e in enrollments}
 
     if not student_ids:
-        return 0
+        yield {'status': 'done', 'count': 0}
+        return
 
     # --- Conversations -------------------------------------------------------
     # scope=sent means messages the instructor sent; participants includes all
     # people in the thread.  We record one event per enrolled student per convo.
-    for conv in client.get_conversations():
+    yield {'status': 'fetching', 'item': 'conversations'}
+    conversations = client.get_conversations()
+
+    for i, conv in enumerate(conversations, 1):
+        yield {'status': 'reading', 'item': f'conversation {i}'}
         ts_str = conv.get('last_authored_at') or conv.get('last_message_at')
         if not ts_str:
             continue
@@ -46,8 +52,15 @@ def sync_course(course_id):
             })
 
     # --- Discussion entries + recent_replies ----------------------------------
-    for topic in client.get_discussion_topics(course_id):
-        for entry in client.get_discussion_entries(course_id, topic['id']):
+    yield {'status': 'fetching', 'item': 'discussion topics'}
+    topics = client.get_discussion_topics(course_id)
+
+    for i, topic in enumerate(topics, 1):
+        yield {'status': 'fetching', 'item': f'discussion {i} entries'}
+        entries = client.get_discussion_entries(course_id, topic['id'])
+
+        yield {'status': 'reading', 'item': f'discussion {i}'}
+        for entry in entries:
             if entry.get('user_id') in student_ids:
                 events.append({
                     'course_id': course_id,
@@ -67,15 +80,22 @@ def sync_course(course_id):
                         'source_id': reply['id'],
                     })
 
-    if not events:
-        return 0
+    if events:
+        yield {'status': 'saving', 'item': f'{len(events)} events'}
+        stmt = pg_insert(InteractionEvent.__table__).values(events)
+        stmt = stmt.on_conflict_do_update(
+            constraint='uq_interaction_event_type_source_student',
+            set_={'occurred_at': stmt.excluded.occurred_at},
+        )
+        db.session.execute(stmt)
+        db.session.commit()
 
-    stmt = pg_insert(InteractionEvent.__table__).values(events)
-    stmt = stmt.on_conflict_do_update(
-        constraint='uq_interaction_event_type_source_student',
-        set_={'occurred_at': stmt.excluded.occurred_at},
-    )
-    db.session.execute(stmt)
-    db.session.commit()
+    yield {'status': 'done', 'count': len(events)}
 
-    return len(events)
+
+def run_sync(course_id):
+    """Consume sync_course to completion without streaming progress. Returns event count."""
+    for msg in sync_course(course_id):
+        if msg.get('status') == 'done':
+            return msg.get('count', 0)
+    return 0

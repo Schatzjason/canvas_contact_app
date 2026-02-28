@@ -1,12 +1,13 @@
+import json
 from datetime import date, datetime, time, timedelta, timezone
 
-from flask import Blueprint, current_app, flash, render_template
+from flask import Blueprint, Response, current_app, flash, render_template, stream_with_context
 from sqlalchemy import func
 
 from app import db
 from app.models.interaction_event import InteractionEvent
 from app.services.canvas_client import CanvasClient
-from app.services.sync import sync_course
+from app.services.sync import run_sync, sync_course
 
 bp = Blueprint('dashboard', __name__)
 
@@ -22,13 +23,31 @@ def index():
     return render_template('dashboard/index.html', courses=courses)
 
 
+@bp.route('/course/<int:course_id>/sync')
+def course_sync_stream(course_id):
+    """SSE endpoint that runs sync_course and streams progress to the browser."""
+    def generate():
+        try:
+            for msg in sync_course(course_id):
+                yield f'data: {json.dumps(msg)}\n\n'
+        except Exception as exc:
+            current_app.logger.error('Sync stream failed for course %s: %s', course_id, exc)
+            yield f'data: {json.dumps({"status": "error", "item": str(exc)})}\n\n'
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
+    )
+
+
 @bp.route('/course/<int:course_id>')
 def course(course_id):
     client = CanvasClient()
 
-    # Sync Canvas data first — caching means this is cheap on repeat visits
+    # Sync on direct load (e.g. refresh/bookmark) — cheap when cache is warm
     try:
-        sync_course(course_id)
+        run_sync(course_id)
     except Exception as exc:
         current_app.logger.error('Sync failed for course %s: %s', course_id, exc)
         flash('Could not sync latest data from Canvas.')

@@ -15,6 +15,26 @@
   .course-list a:hover { text-decoration: underline; }
   .course-meta { font-size: 0.8rem; color: #777; margin-top: 0.2rem; }
   .empty { color: #777; }
+
+  #progress-area {
+    margin-top: 1.25rem;
+    padding: 0.85rem 1rem;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+  }
+  #progress-label {
+    font-size: 0.75rem;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.3rem;
+  }
+  #progress-text {
+    font-family: ui-monospace, 'SF Mono', monospace;
+    font-size: 0.875rem;
+    color: #333;
+  }
 {% endblock %}
 
 {% block content %}
@@ -24,7 +44,12 @@
   <ul class="course-list">
     {% for course in courses %}
       <li>
-        <a href="{{ url_for('dashboard.course', course_id=course.id) }}">{{ course.name }}</a>
+        <a class="course-link"
+           href="{{ url_for('dashboard.course', course_id=course.id) }}"
+           data-course-id="{{ course.id }}"
+           data-sync-url="{{ url_for('dashboard.course_sync_stream', course_id=course.id) }}">
+          {{ course.name }}
+        </a>
         <div class="course-meta">
           {{ course.course_code }}
           {% if course.term %} · {{ course.term.name }}{% endif %}
@@ -32,7 +57,68 @@
       </li>
     {% endfor %}
   </ul>
+
+  <div id="progress-area" hidden>
+    <div id="progress-label">Syncing with Canvas</div>
+    <div id="progress-text">Connecting…</div>
+  </div>
 {% else %}
   <p class="empty">No active courses found.</p>
 {% endif %}
+
+<script>
+(function () {
+  var activeSource = null;
+
+  document.querySelectorAll('a.course-link').forEach(function (link) {
+    link.addEventListener('click', function (e) {
+      e.preventDefault();
+
+      var destUrl  = this.href;
+      var syncUrl  = this.dataset.syncUrl;
+      var area     = document.getElementById('progress-area');
+      var text     = document.getElementById('progress-text');
+
+      // Close any previous stream if the user clicks a different course
+      if (activeSource) {
+        activeSource.close();
+        activeSource = null;
+      }
+
+      area.hidden = false;
+      text.textContent = 'Connecting…';
+
+      activeSource = new EventSource(syncUrl);
+
+      activeSource.onmessage = function (e) {
+        var msg = JSON.parse(e.data);
+
+        if (msg.status === 'done') {
+          activeSource.close();
+          activeSource = null;
+          window.location.href = destUrl;
+        } else if (msg.status === 'error') {
+          activeSource.close();
+          activeSource = null;
+          text.textContent = 'Error: ' + msg.item + '. Loading anyway…';
+          setTimeout(function () { window.location.href = destUrl; }, 1500);
+        } else if (msg.status === 'fetching') {
+          text.textContent = 'Fetching ' + msg.item + '…';
+        } else if (msg.status === 'reading') {
+          text.textContent = 'Reading ' + msg.item + '…';
+        } else if (msg.status === 'saving') {
+          text.textContent = 'Saving ' + msg.item + '…';
+        }
+      };
+
+      activeSource.onerror = function () {
+        activeSource.close();
+        activeSource = null;
+        text.textContent = 'Connection lost. Loading…';
+        setTimeout(function () { window.location.href = destUrl; }, 500);
+      };
+    });
+  });
+}());
+</script>
 {% endblock %}
