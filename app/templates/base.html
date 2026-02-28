@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Canvas Tracker{% endblock %}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; font-size: 15px; color: #1a1a1a; background: #f5f5f5; }
+
+    header {
+      background: #c0392b;
+      color: #fff;
+      padding: 0.7rem 1.5rem;
+    }
+    header a.brand { color: #fff; text-decoration: none; font-weight: 700; font-size: 1.05rem; }
+
+    main { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+
+    .flash-list { list-style: none; margin-bottom: 1rem; }
+    .flash-list li {
+      padding: 0.65rem 1rem;
+      border-radius: 4px;
+      background: #fff3cd;
+      border: 1px solid #e0a800;
+      margin-bottom: 0.5rem;
+    }
+
+    {% block extra_styles %}{% endblock %}
+  </style>
+</head>
+<body>
+  <header>
+    <a class="brand" href="{{ url_for('dashboard.index') }}">Canvas Tracker</a>
+  </header>
+
+  <main>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <ul class="flash-list">
+          {% for msg in messages %}<li>{{ msg }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

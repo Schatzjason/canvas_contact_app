@@ -9,8 +9,8 @@ where the x-axis shows the last 21 days, with an icon in each day cell where
 an interaction occurred.
 
 The app is being built in phases:
-1. Single instructor (local dev, Canvas hosted at instructure.com)
-2. Multi-instructor at CCSF
+1. Single instructor (local dev, personal Canvas API token)
+2. Multi-instructor at CCSF (will require OAuth 2.0 — not in scope now)
 3. Eventually: any Canvas institution (multi-tenant)
 
 Design all decisions with phase 1 complete and phase 2–3 non-breaking to add.
@@ -22,7 +22,7 @@ Design all decisions with phase 1 complete and phase 2–3 non-breaking to add.
 - **Python / Flask** (app factory pattern with blueprints)
 - **PostgreSQL** via Flask-SQLAlchemy
 - **Flask-Migrate** (Alembic under the hood) for all schema changes
-- **Canvas LMS REST API** — authenticated via Canvas OAuth 2.0
+- **Canvas LMS REST API** — authenticated via personal API token (phase 1)
 - **python-dotenv** for config
 - **No frontend framework** — server-rendered Jinja2 templates with clean,
   minimal CSS (no Bootstrap, no Tailwind). Should look professional enough to
@@ -51,6 +51,7 @@ canvas_app/
 │           ├── index.html
 │           └── course.html
 ├── migrations/              # managed by Flask-Migrate, do not hand-edit
+├── tests/
 ├── .env.example
 ├── requirements.txt
 └── run.py
@@ -61,21 +62,42 @@ rewrite unless there is a clear reason to.
 
 ---
 
-## Canvas OAuth 2.0
+## Authentication — Phase 1 (personal API token)
 
-Open to improvements, but requirements are:
+No OAuth in phase 1. Authentication is handled via a single personal Canvas
+API token stored in `.env`:
 
-- Institution base URL, client ID, and client secret come from `.env`
-- Standard authorization code flow; redirect URI: `http://localhost:5000/auth/callback`
-- Store `access_token`, `refresh_token`, and `token_expires_at` per user in Postgres
-- Implement token refresh when `token_expires_at` is set and expired
-- Canvas Developer Key needs these API scopes at minimum:
-  - `url:GET|/api/v1/users/self`
-  - `url:GET|/api/v1/courses`
-  - `url:GET|/api/v1/courses/:course_id/enrollments`
-  - `url:GET|/api/v1/conversations`
-  - `url:GET|/api/v1/courses/:course_id/discussion_topics`
-  - `url:GET|/api/v1/courses/:course_id/discussion_topics/:topic_id/entries`
+```
+CANVAS_API_TOKEN=
+```
+
+- `CanvasClient` reads this token from config and sends it as a Bearer token
+  header on every request
+- No login/logout flow needed in phase 1 — the app is single-user, local only
+- `auth.py` and the User model can be stubbed or omitted for now, but structure
+  the code so OAuth can be dropped in for phase 2 without rewriting
+  `canvas_client.py` or the route logic
+- When phase 2 arrives, the token will come from the authenticated user's DB
+  record instead of from `.env` — `CanvasClient.__init__` should accept a token
+  parameter so this swap is a one-line change
+
+---
+
+## Environment variables
+
+```
+FLASK_SECRET_KEY=
+DATABASE_URL=postgresql://localhost/canvas_app
+TEST_DATABASE_URL=postgresql://localhost/canvas_app_test
+
+CANVAS_BASE_URL=https://ccsf.instructure.com
+CANVAS_API_TOKEN=
+
+STALE_WARN_DAYS=7
+STALE_ALERT_DAYS=14
+```
+
+Keep `.env.example` in sync with all variables. `.env` is never committed.
 
 ---
 
@@ -83,25 +105,24 @@ Open to improvements, but requirements are:
 
 ### What lives in Postgres
 
-1. **Users** — OAuth tokens, Canvas user ID, name, email
-2. **API response cache** — keyed by endpoint + params, with a TTL
+1. **API response cache** — keyed by endpoint + params, with a TTL
    - Model: `canvas_cache(id, cache_key, response_json, fetched_at, ttl_seconds)`
    - TTL defaults: conversations = 15 min, discussion entries = 15 min, enrollments = 60 min
    - `CanvasClient` checks cache before hitting the API; writes through on miss
    - Cache failures log a warning and fall through to live API — never hard-fail
-3. **Interaction log** — every interaction event surfaced from Canvas, persisted
+
+2. **Interaction log** — every interaction event surfaced from Canvas, persisted
    for historical trending
-   - Model: `interaction_event(id, user_id, course_id, student_canvas_id, event_type, occurred_at, source_id)`
+   - Model: `interaction_event(id, course_id, student_canvas_id, event_type, occurred_at, source_id)`
    - `event_type`: `conversation` | `discussion_entry` | `discussion_reply`
    - `source_id`: Canvas object ID — used to deduplicate on upsert
+   - Unique constraint on `(event_type, source_id)` to support upsert target
    - On each sync, upsert events; compute last interaction per student from
      this table, not from live API data
-   - Unique constraint on `(event_type, source_id)` to support upsert target
 
 ### What is always fetched live
 
 - Course list (lightweight, always fresh)
-- User identity (`/users/self`) at login time only
 
 ---
 
@@ -115,7 +136,7 @@ headers showing the date. Each cell shows a simple icon or marker if one or
 more interactions occurred on that day, and is empty otherwise.
 
 The visual design of the icon/marker is intentionally left open — make a
-reasonable first pass and the instructor will iterate.
+reasonable first pass; the instructor will iterate on appearance.
 
 **Row contents:**
 - Student name (leftmost column, links to detail view)
@@ -125,14 +146,9 @@ reasonable first pass and the instructor will iterate.
   - **Yellow**: between `STALE_WARN_DAYS` and `STALE_ALERT_DAYS` days
   - **Red**: beyond `STALE_ALERT_DAYS` days, or no interaction ever
 
-**Sorting:** Students with no interaction ever appear first. Remaining students
-sorted by last interaction date ascending (least recent first).
-
-**Config** (`.env`):
-```
-STALE_WARN_DAYS=7
-STALE_ALERT_DAYS=14
-```
+**Sorting:** Students with no interaction ever appear first, colored red.
+Remaining students sorted by last interaction date ascending (least recent
+first).
 
 Clicking a student name opens a detail view listing all logged interaction
 events for that student in that course, newest first.
@@ -141,7 +157,14 @@ events for that student in that course, newest first.
 
 ## Canvas API aggregation logic
 
-`last_interaction_per_student()` in `canvas_client.py` aggregates:
+`canvas_client.py` handles all Canvas API interaction. Key behaviors:
+
+- All requests use `Bearer {CANVAS_API_TOKEN}` header
+- Follow `Link: <url>; rel="next"` headers to paginate through all results
+- All Canvas timestamps are ISO 8601 with Z suffix — normalize to UTC-aware
+  `datetime` objects throughout; never compare tz-aware and tz-naive
+
+Aggregation sources for `sync_course(course_id)`:
 
 1. **Conversations** (`/api/v1/conversations?scope=sent`):
    - Match `participants` IDs against enrolled student IDs
@@ -152,16 +175,14 @@ events for that student in that course, newest first.
    - `recent_replies` on each entry also has `user_id` and `created_at`
    - Do **not** recurse into full reply threads for now (TODO)
 
-All Canvas timestamps are ISO 8601 with Z suffix — normalize to UTC-aware
-`datetime` objects throughout. Never compare tz-aware and tz-naive datetimes.
-
 ---
 
 ## Error handling
 
 - Canvas API 4xx/5xx → catch, flash message, do not raise a 500
-- Expired/invalid token → redirect to `/auth/login` with flash message
 - Cache failure → log warning, fall through to live API
+- Missing or invalid `CANVAS_API_TOKEN` → fail at startup with a clear error
+  message, not silently at request time
 
 ---
 
@@ -169,7 +190,7 @@ All Canvas timestamps are ISO 8601 with Z suffix — normalize to UTC-aware
 
 - `pytest` + `pytest-flask`; separate test DB via `TEST_DATABASE_URL` env var
 - Write unit tests for:
-  - `last_interaction_per_student()` using fixture JSON (no live Canvas calls)
+  - Aggregation logic using fixture JSON (no live Canvas calls)
   - Cache hit/miss logic
   - Staleness threshold classification
 - No integration tests against live Canvas in this phase
@@ -178,10 +199,11 @@ All Canvas timestamps are ISO 8601 with Z suffix — normalize to UTC-aware
 
 ## Implementation order
 
-1. Flask-Migrate setup — replace `db.create_all()` with proper migrations;
-   generate initial migration from existing models
+1. Flask-Migrate setup — ensure migrations folder is initialized; generate
+   initial migration from models
 2. Cache model + cache layer in `CanvasClient`
-3. `InteractionEvent` model + upsert logic (using `insert().on_conflict_do_update()`)
+3. `InteractionEvent` model + upsert logic (using
+   `sqlalchemy.dialects.postgresql.insert().on_conflict_do_update()`)
 4. Sync service that pulls Canvas data → populates `interaction_event`
 5. Course timeline table view with color-coded rows and 21-day x-axis
 6. Student detail view (full event history, newest first)

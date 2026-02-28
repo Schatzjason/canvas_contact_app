@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Your Courses — Canvas Tracker{% endblock %}
+
+{% block extra_styles %}
+  h1 { font-size: 1.4rem; margin-bottom: 1.25rem; }
+  .course-list { list-style: none; }
+  .course-list li {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 0.85rem 1rem;
+    margin-bottom: 0.5rem;
+  }
+  .course-list a { text-decoration: none; color: #c0392b; font-weight: 600; }
+  .course-list a:hover { text-decoration: underline; }
+  .course-meta { font-size: 0.8rem; color: #777; margin-top: 0.2rem; }
+  .empty { color: #777; }
+{% endblock %}
+
+{% block content %}
+<h1>Your Courses</h1>
+
+{% if courses %}
+  <ul class="course-list">
+    {% for course in courses %}
+      <li>
+        <a href="#">{{ course.name }}</a>
+        <div class="course-meta">
+          {{ course.course_code }}
+          {% if course.term %} · {{ course.term.name }}{% endif %}
+        </div>
+      </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p class="empty">No active courses found.</p>
+{% endif %}
+{% endblock %}
