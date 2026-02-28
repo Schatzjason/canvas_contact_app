@@ -123,6 +123,10 @@ class CanvasClient:
     # Public API methods                                                   #
     # ------------------------------------------------------------------ #
 
+    def get_course(self, course_id):
+        """Fetch a single course object (always live)."""
+        return self._get(f'/api/v1/courses/{course_id}')
+
     def get_courses(self):
         """Return active teacher courses — always fetched live, never cached."""
         return self._get('/api/v1/courses', params={

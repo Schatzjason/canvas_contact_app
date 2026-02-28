@@ -24,7 +24,7 @@
   <ul class="course-list">
     {% for course in courses %}
       <li>
-        <a href="#">{{ course.name }}</a>
+        <a href="{{ url_for('dashboard.course', course_id=course.id) }}">{{ course.name }}</a>
         <div class="course-meta">
           {{ course.course_code }}
           {% if course.term %} · {{ course.term.name }}{% endif %}

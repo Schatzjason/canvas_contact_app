@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}{{ course.name }} — Canvas Tracker{% endblock %}
+
+{% block extra_styles %}
+  h1 { font-size: 1.3rem; margin-bottom: 0.25rem; }
+  .course-code { color: #777; font-size: 0.85rem; margin-bottom: 1.5rem; }
+
+  .timeline-wrap { overflow-x: auto; }
+
+  table.timeline {
+    border-collapse: collapse;
+    width: 100%;
+    table-layout: fixed;
+    font-size: 0.85rem;
+  }
+  table.timeline th,
+  table.timeline td {
+    padding: 0.35rem 0.25rem;
+    text-align: center;
+    border: 1px solid #ddd;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  table.timeline th.name-col,
+  table.timeline td.name-col {
+    text-align: left;
+    width: 180px;
+    padding-left: 0.6rem;
+  }
+  table.timeline th.day-col { width: 38px; font-weight: normal; color: #555; }
+  table.timeline th.today-col { font-weight: 700; color: #c0392b; }
+
+  tr.row-green  td { background: #d4edda; }
+  tr.row-yellow td { background: #fff3cd; }
+  tr.row-red    td { background: #f8d7da; }
+
+  .dot { color: #2c7be5; font-size: 1rem; line-height: 1; }
+
+  .last-seen { font-size: 0.75rem; color: #555; display: block; }
+
+  a.student-link { text-decoration: none; color: inherit; font-weight: 600; }
+  a.student-link:hover { text-decoration: underline; }
+
+  .legend { display: flex; gap: 1.25rem; margin-bottom: 1rem; font-size: 0.8rem; align-items: center; }
+  .legend-item { display: flex; align-items: center; gap: 0.35rem; }
+  .legend-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #ccc; }
+  .swatch-green  { background: #d4edda; }
+  .swatch-yellow { background: #fff3cd; }
+  .swatch-red    { background: #f8d7da; }
+{% endblock %}
+
+{% block content %}
+<h1>{{ course.name }}</h1>
+<div class="course-code">{{ course.course_code }}</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-swatch swatch-green"></div> Interacted within {{ config.STALE_WARN_DAYS }} days</div>
+  <div class="legend-item"><div class="legend-swatch swatch-yellow"></div> {{ config.STALE_WARN_DAYS }}–{{ config.STALE_ALERT_DAYS }} days ago</div>
+  <div class="legend-item"><div class="legend-swatch swatch-red"></div> Over {{ config.STALE_ALERT_DAYS }} days or never</div>
+</div>
+
+<div class="timeline-wrap">
+  <table class="timeline">
+    <thead>
+      <tr>
+        <th class="name-col">Student</th>
+        {% for day in days %}
+          <th class="{% if day == today %}today-col{% else %}day-col{% endif %}">
+            {{ day.month }}/{{ day.day }}
+          </th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for student in students %}
+        <tr class="row-{{ student.staleness }}">
+          <td class="name-col">
+            <a class="student-link" href="#">{{ student.name }}</a>
+            {% if student.last_date %}
+              <span class="last-seen">{{ student.days_since }}d ago</span>
+            {% else %}
+              <span class="last-seen">no contact</span>
+            {% endif %}
+          </td>
+          {% for day in days %}
+            <td>{% if day in student.active_days %}<span class="dot">●</span>{% endif %}</td>
+          {% endfor %}
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if not students %}
+  <p style="color:#777; margin-top:1rem;">No enrolled students found.</p>
+{% endif %}
+{% endblock %}
