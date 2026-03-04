@@ -1,74 +1,346 @@
 {% extends "base.html" %}
 {% block title %}Your Courses — Canvas Tracker{% endblock %}
 
+{% block nav %}
+<nav class="app-nav">
+  <div class="nav-brand">
+    <span class="nav-logo">CanvasContact<span>Tracker</span></span>
+    <span class="nav-label">Instructor Tools</span>
+  </div>
+  <span class="nav-meta">Spring 2025</span>
+</nav>
+{% endblock %}
+
 {% block extra_styles %}
-  h1 { font-size: 1.4rem; margin-bottom: 1.25rem; }
-  .course-list { list-style: none; }
-  .course-list li {
-    background: #fff;
-    border: 1px solid #ddd;
-    border-radius: 5px;
-    padding: 0.85rem 1rem;
-    margin-bottom: 0.5rem;
+  :root {
+    --bg: #f7f7f5;
+    --surface: #ffffff;
+    --border: #e4e2dc;
+    --border-strong: #c8c4bb;
+    --text-primary: #1a1915;
+    --text-secondary: #6b6760;
+    --text-tertiary: #9b9893;
+    --accent: #c44b1e;
+    --tier-hot-dot: #e8705a;
+    --tier-hot-bg: #fef2f0;
+    --tier-ok-dot: #5a9e6e;
+    --tier-ok-bg: #f2f8f4;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
   }
-  .course-list a { text-decoration: none; color: #c0392b; font-weight: 600; }
-  .course-list a:hover { text-decoration: underline; }
-  .course-meta { font-size: 0.8rem; color: #777; margin-top: 0.2rem; }
-  .empty { color: #777; }
+
+  body { font-family: var(--sans); background: var(--bg); }
+  main { max-width: none; margin: 0; padding: 0; }
+
+  .app-nav {
+    background: #1a1915;
+    padding: 0 40px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #2e2c28;
+  }
+  .nav-brand { display: flex; align-items: baseline; gap: 10px; }
+  .nav-logo { font-family: var(--mono); font-size: 13px; font-weight: 500; color: #f0ede8; letter-spacing: 0.04em; }
+  .nav-logo span { color: var(--accent); }
+  .nav-label { font-family: var(--mono); font-size: 10px; color: #6b6760; letter-spacing: 0.06em; text-transform: uppercase; }
+  .nav-meta { font-family: var(--mono); font-size: 11px; color: #6b6760; }
+
+  .page { max-width: 760px; margin: 0 auto; padding: 48px 24px; }
+  .page-heading { margin-bottom: 32px; }
+  .page-heading h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 4px; }
+  .page-heading p { font-family: var(--mono); font-size: 11px; color: var(--text-tertiary); letter-spacing: 0.04em; }
+
+  .courses { display: flex; flex-direction: column; gap: 12px; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    padding: 20px 24px;
+    gap: 24px;
+    text-decoration: none;
+    color: inherit;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+    cursor: pointer;
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    background: var(--border-strong);
+    transition: background 0.15s ease;
+  }
+  .card:hover {
+    border-color: var(--border-strong);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08), 0 0 0 1px var(--border-strong);
+    transform: translateY(-1px);
+  }
+  .card:hover::before { background: var(--accent); }
+
+  .card-main { flex: 1; min-width: 0; padding-left: 8px; }
+  .card-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card-subtitle { font-family: var(--mono); font-size: 11px; color: var(--text-tertiary); letter-spacing: 0.04em; }
+
+  .card-stats { display: flex; align-items: center; flex-shrink: 0; }
+  .stat {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    padding: 0 20px;
+    border-right: 1px solid var(--border);
+  }
+  .stat:last-child { border-right: none; }
+  .stat-value { font-family: var(--mono); font-size: 18px; font-weight: 500; line-height: 1; color: var(--text-primary); }
+  .stat-label { font-family: var(--mono); font-size: 10px; color: var(--text-tertiary); letter-spacing: 0.05em; text-transform: uppercase; margin-top: 3px; }
+  .badge { font-family: var(--mono); font-size: 11px; padding: 3px 8px; border-radius: 3px; letter-spacing: 0.03em; line-height: 1.6; }
+  .badge.fresh { background: var(--tier-ok-bg); color: var(--tier-ok-dot); }
+  .badge.stale { background: var(--tier-hot-bg); color: var(--tier-hot-dot); }
+
+  .card-icons { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-left: 8px; }
+
+  .fetch-btn {
+    background: none;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    position: relative;
+    color: var(--border-strong);
+    transition: color 0.15s ease, background 0.15s ease;
+  }
+  .fetch-btn:hover { color: var(--accent); background: rgba(196,75,30,0.06); }
+  .fetch-btn:active { background: rgba(196,75,30,0.12); }
+  .fetch-btn.loading { color: var(--accent); animation: spin 0.8s linear infinite; pointer-events: none; }
+  .fetch-btn.done { color: var(--tier-ok-dot); }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+
+  .fetch-btn::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1a1915;
+    color: #f0ede8;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    padding: 4px 8px;
+    border-radius: 4px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+  .fetch-btn:hover::after { opacity: 1; }
+
+  .card-arrow {
+    color: var(--border-strong);
+    flex-shrink: 0;
+    transition: color 0.15s ease, transform 0.15s ease;
+  }
+  .card:hover .card-arrow { color: var(--accent); transform: translateX(3px); }
 
   #progress-area {
-    margin-top: 1.25rem;
-    padding: 0.85rem 1rem;
-    background: #fff;
-    border: 1px solid #ddd;
-    border-radius: 5px;
+    margin-top: 16px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
-  #progress-label {
-    font-size: 0.75rem;
-    color: #999;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 0.3rem;
+  #progress-area[hidden] { display: none; }
+  .progress-line {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-secondary);
   }
-  #progress-text {
-    font-family: ui-monospace, 'SF Mono', monospace;
-    font-size: 0.875rem;
-    color: #333;
-  }
+  .progress-line.done { color: var(--tier-ok-dot); }
+  .progress-line.error { color: var(--tier-hot-dot); }
+
+  .empty { font-family: var(--mono); font-size: 13px; color: var(--text-secondary); }
 {% endblock %}
 
 {% block content %}
-<h1>Your Courses</h1>
-
-{% if courses %}
-  <ul class="course-list">
-    {% for course in courses %}
-      <li>
-        <a class="course-link"
-           href="{{ url_for('dashboard.course', course_id=course.id) }}"
-           data-course-id="{{ course.id }}"
-           data-sync-url="{{ url_for('dashboard.course_sync_stream', course_id=course.id) }}">
-          {{ course.name }}
-        </a>
-        <div class="course-meta">
-          {{ course.course_code }}
-          {% if course.term %} · {{ course.term.name }}{% endif %}
-        </div>
-      </li>
-    {% endfor %}
-  </ul>
-
-  <div id="progress-area" hidden>
-    <div id="progress-label">Syncing with Canvas</div>
-    <div id="progress-text">Connecting…</div>
+<div class="page">
+  <div class="page-heading">
+    <h1>Your Courses</h1>
+    <p>{{ courses|length }} active course{{ 's' if courses|length != 1 }}</p>
   </div>
-{% else %}
+
+  {% if courses %}
+  <div class="courses">
+    {% for course in courses %}
+      {% set stats = stats_by_course.get(course.id, {}) %}
+      <a class="card course-link"
+         href="{{ url_for('dashboard.course', course_id=course.id) }}"
+         data-sync-url="{{ url_for('dashboard.course_sync_stream', course_id=course.id) }}"
+         data-course-id="{{ course.id }}"
+         data-course-name="{{ course.name }}"
+         data-stats-url="{{ url_for('dashboard.course_stats', course_id=course.id) }}">
+        <div class="card-main">
+          <div class="card-title">{{ course.name }}</div>
+          <div class="card-subtitle">{{ course.course_code }}{% if course.term %} · {{ course.term.name }}{% endif %}</div>
+        </div>
+        <div class="card-stats">
+          {% if stats.active_count %}
+          <div class="stat">
+            <span class="stat-value">{{ stats.active_count }}</span>
+            <span class="stat-label">Active</span>
+          </div>
+          {% endif %}
+          <div class="stat">
+            <span class="badge {{ stats.badge_class }}">{{ stats.badge_text }}</span>
+            <span class="stat-label">Last seen</span>
+          </div>
+        </div>
+        <div class="card-icons">
+          <button class="fetch-btn" data-tip="Refresh data">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5"/>
+              <path d="M13.5 2.5v3h-3"/>
+            </svg>
+          </button>
+          <svg class="card-arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 8h10M9 4l4 4-4 4"/>
+          </svg>
+        </div>
+      </a>
+    {% endfor %}
+  </div>
+
+  <div id="progress-area" hidden></div>
+
+  {% else %}
   <p class="empty">No active courses found.</p>
-{% endif %}
+  {% endif %}
+</div>
 
 <script>
 (function () {
-  var activeSource = null;
+  var SVG_REFRESH = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5"/><path d="M13.5 2.5v3h-3"/></svg>';
+  var SVG_CHECK   = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 8 6 12 14 4"/></svg>';
+
+  function refreshBadge(card) {
+    fetch(card.dataset.statsUrl)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var badge = card.querySelector('.badge');
+        badge.textContent = data.badge_text;
+        badge.className = 'badge ' + data.badge_class;
+        var statVal = card.querySelector('.stat-value');
+        if (statVal && data.active_count) statVal.textContent = data.active_count;
+      });
+  }
+
+  // courseId → { source, btn, line }
+  var activeSyncs = {};
+
+  function area() { return document.getElementById('progress-area'); }
+
+  function addLine(courseId, label) {
+    var line = document.createElement('div');
+    line.className = 'progress-line';
+    line.dataset.courseId = courseId;
+    line.textContent = label;
+    area().appendChild(line);
+    area().hidden = false;
+    return line;
+  }
+
+  function removeLine(line) {
+    line.remove();
+    if (!area().children.length) area().hidden = true;
+  }
+
+  // ── Refresh button ────────────────────────────────────────────────────────
+  document.querySelectorAll('.fetch-btn').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      var card      = btn.closest('a.course-link');
+      var courseId  = card.dataset.courseId;
+      var name      = card.dataset.courseName;
+      var syncUrl   = card.dataset.syncUrl;
+
+      if (activeSyncs[courseId]) return;
+
+      btn.classList.add('loading');
+      btn.setAttribute('data-tip', 'Fetching…');
+      var line = addLine(courseId, name + ': connecting…');
+      var source = new EventSource(syncUrl);
+      activeSyncs[courseId] = { source: source, btn: btn, line: line };
+
+      source.onmessage = function (evt) {
+        var msg = JSON.parse(evt.data);
+        if (msg.status === 'done') {
+          source.close();
+          delete activeSyncs[courseId];
+          line.textContent = name + ': done (' + msg.count + ' events)';
+          line.classList.add('done');
+          btn.classList.remove('loading');
+          btn.classList.add('done');
+          btn.innerHTML = SVG_CHECK;
+          btn.setAttribute('data-tip', 'Up to date');
+          refreshBadge(card);
+          setTimeout(function () {
+            btn.classList.remove('done');
+            btn.innerHTML = SVG_REFRESH;
+            btn.setAttribute('data-tip', 'Refresh data');
+          }, 2000);
+          setTimeout(function () { removeLine(line); }, 4000);
+        } else if (msg.status === 'error') {
+          source.close();
+          delete activeSyncs[courseId];
+          btn.classList.remove('loading');
+          btn.innerHTML = SVG_REFRESH;
+          btn.setAttribute('data-tip', 'Refresh data');
+          line.textContent = name + ': error — ' + msg.item;
+          line.classList.add('error');
+          setTimeout(function () { removeLine(line); }, 5000);
+        } else if (msg.status === 'fetching') {
+          line.textContent = name + ': fetching ' + msg.item + '…';
+        } else if (msg.status === 'fetching_page') {
+          line.textContent += '.';
+        } else if (msg.status === 'saving') {
+          line.textContent = name + ': saving…';
+        }
+      };
+
+      source.onerror = function () {
+        if (!activeSyncs[courseId]) return;
+        source.close();
+        delete activeSyncs[courseId];
+        btn.classList.remove('loading');
+        btn.innerHTML = SVG_REFRESH;
+        btn.setAttribute('data-tip', 'Refresh data');
+        line.textContent = name + ': connection lost';
+        line.classList.add('error');
+        setTimeout(function () { removeLine(line); }, 3000);
+      };
+    });
+  });
+
+  // ── Card click → sync then navigate ───────────────────────────────────────
+  var navSource = null;
 
   document.querySelectorAll('a.course-link').forEach(function (link) {
     link.addEventListener('click', function (e) {
@@ -76,45 +348,42 @@
 
       var destUrl  = this.href;
       var syncUrl  = this.dataset.syncUrl;
-      var area     = document.getElementById('progress-area');
-      var text     = document.getElementById('progress-text');
+      var courseId = this.dataset.courseId;
+      var name     = this.dataset.courseName;
 
-      // Close any previous stream if the user clicks a different course
-      if (activeSource) {
-        activeSource.close();
-        activeSource = null;
+      // If a refresh for this course is already running, just navigate
+      if (activeSyncs[courseId]) {
+        window.location.href = destUrl;
+        return;
       }
 
-      area.hidden = false;
-      text.textContent = 'Connecting…';
+      if (navSource) { navSource.close(); navSource = null; }
 
-      activeSource = new EventSource(syncUrl);
+      var line = addLine(courseId, name + ': connecting…');
+      navSource = new EventSource(syncUrl);
 
-      activeSource.onmessage = function (e) {
-        var msg = JSON.parse(e.data);
-
+      navSource.onmessage = function (evt) {
+        var msg = JSON.parse(evt.data);
         if (msg.status === 'done') {
-          activeSource.close();
-          activeSource = null;
+          navSource.close(); navSource = null;
           window.location.href = destUrl;
         } else if (msg.status === 'error') {
-          activeSource.close();
-          activeSource = null;
-          text.textContent = 'Error: ' + msg.item + '. Loading anyway…';
+          navSource.close(); navSource = null;
+          line.textContent = name + ': error. Loading anyway…';
           setTimeout(function () { window.location.href = destUrl; }, 1500);
         } else if (msg.status === 'fetching') {
-          text.textContent = 'Fetching ' + msg.item + '…';
+          line.textContent = name + ': fetching ' + msg.item + '…';
         } else if (msg.status === 'fetching_page') {
-          text.textContent = text.textContent + '.';
+          line.textContent += '.';
         } else if (msg.status === 'saving') {
-          text.textContent = 'Saving ' + msg.item + '…';
+          line.textContent = name + ': saving…';
         }
       };
 
-      activeSource.onerror = function () {
-        activeSource.close();
-        activeSource = null;
-        text.textContent = 'Connection lost. Loading…';
+      navSource.onerror = function () {
+        if (!navSource) return;
+        navSource.close(); navSource = null;
+        line.textContent = name + ': connection lost. Loading…';
         setTimeout(function () { window.location.href = destUrl; }, 500);
       };
     });

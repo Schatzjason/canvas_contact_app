@@ -15,6 +15,25 @@ from app.services.sync import run_sync, sync_course
 bp = Blueprint('dashboard', __name__)
 
 
+def _time_badge(last_at, now, warn_days):
+    """Return (badge_text, badge_class) given the last-interaction datetime."""
+    if last_at is None:
+        return 'never', 'stale'
+    if last_at.tzinfo is None:
+        last_at = last_at.replace(tzinfo=timezone.utc)
+    seconds = (now - last_at).total_seconds()
+    if seconds < 60:
+        text = 'just now'
+    elif seconds < 3600:
+        text = f'{int(seconds / 60)}m ago'
+    elif seconds < 86400:
+        text = f'{int(seconds / 3600)}h ago'
+    else:
+        text = f'{int(seconds / 86400)}d ago'
+    cls = 'fresh' if seconds < warn_days * 86400 else 'stale'
+    return text, cls
+
+
 @bp.route('/')
 def index():
     client = CanvasClient()
@@ -23,7 +42,60 @@ def index():
     except Exception as exc:
         flash(f'Could not load courses from Canvas: {exc}')
         courses = []
-    return render_template('dashboard/index.html', courses=courses)
+
+    now = datetime.now(timezone.utc)
+    warn_days = current_app.config['STALE_WARN_DAYS']
+    course_ids = [c['id'] for c in courses]
+    if course_ids:
+        last_rows = {
+            row.course_id: row.last_at
+            for row in db.session.query(
+                InteractionEvent.course_id,
+                func.max(InteractionEvent.occurred_at).label('last_at'),
+            ).filter(InteractionEvent.course_id.in_(course_ids))
+            .group_by(InteractionEvent.course_id).all()
+        }
+        count_rows = {
+            row.course_id: row.cnt
+            for row in db.session.query(
+                InteractionEvent.course_id,
+                func.count(InteractionEvent.student_canvas_id.distinct()).label('cnt'),
+            ).filter(InteractionEvent.course_id.in_(course_ids))
+            .group_by(InteractionEvent.course_id).all()
+        }
+        stats_by_course = {
+            cid: {
+                'badge_text': _time_badge(last_rows.get(cid), now, warn_days)[0],
+                'badge_class': _time_badge(last_rows.get(cid), now, warn_days)[1],
+                'active_count': count_rows.get(cid, 0),
+            }
+            for cid in course_ids
+        }
+    else:
+        stats_by_course = {}
+
+    return render_template('dashboard/index.html',
+        courses=courses,
+        stats_by_course=stats_by_course,
+    )
+
+
+@bp.route('/course/<int:course_id>/stats')
+def course_stats(course_id):
+    """Return current last-seen badge text/class for a course (used after background refresh)."""
+    now = datetime.now(timezone.utc)
+    warn_days = current_app.config['STALE_WARN_DAYS']
+
+    last_at = db.session.query(
+        func.max(InteractionEvent.occurred_at)
+    ).filter(InteractionEvent.course_id == course_id).scalar()
+
+    active_count = db.session.query(
+        func.count(InteractionEvent.student_canvas_id.distinct())
+    ).filter(InteractionEvent.course_id == course_id).scalar() or 0
+
+    badge_text, badge_class = _time_badge(last_at, now, warn_days)
+    return {'badge_text': badge_text, 'badge_class': badge_class, 'active_count': active_count}
 
 
 @bp.route('/course/<int:course_id>/flush-cache', methods=['POST'])

@@ -43,9 +43,11 @@
   </symbol>
 </svg>
 
+  {% block nav %}
   <header>
     <a class="brand" href="{{ url_for('dashboard.index') }}">Canvas Tracker</a>
   </header>
+  {% endblock %}
 
   <main>
     {% with messages = get_flashed_messages() %}

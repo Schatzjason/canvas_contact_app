@@ -5,6 +5,7 @@ class Config:
     SECRET_KEY = os.environ.get('FLASK_SECRET_KEY', 'dev-secret-change-me')
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS = {'connect_args': {'options': '-c timezone=UTC'}}
 
     CANVAS_BASE_URL = os.environ.get('CANVAS_BASE_URL', 'https://ccsf.instructure.com')
     CANVAS_API_TOKEN = os.environ.get('CANVAS_API_TOKEN')
