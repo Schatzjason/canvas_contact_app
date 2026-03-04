@@ -299,3 +299,35 @@ def course(course_id):
         disc_messages=disc_messages,
         msg_texts=msg_texts,
     )
+
+
+@bp.route('/course/<int:course_id>/student/<int:student_id>')
+def student(course_id, student_id):
+    client = CanvasClient()
+
+    try:
+        course_obj = client.get_course(course_id)
+    except Exception as exc:
+        flash(f'Could not load course info: {exc}')
+        course_obj = {'name': f'Course {course_id}', 'course_code': '', 'id': course_id}
+
+    try:
+        enrollments = client.get_enrollments(course_id)
+    except Exception as exc:
+        flash(f'Could not load enrollments: {exc}')
+        enrollments = []
+
+    student_enrollment = next(
+        (e for e in enrollments if e['user_id'] == student_id), None
+    )
+    if student_enrollment:
+        user = student_enrollment.get('user', {})
+        student_name = user.get('name', f'Student {student_id}')
+    else:
+        student_name = f'Student {student_id}'
+
+    return render_template('dashboard/student.html',
+        course=course_obj,
+        student_id=student_id,
+        student_name=student_name,
+    )

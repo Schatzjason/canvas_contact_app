@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ student_name }} — Canvas Tracker{% endblock %}
+
+{% block nav %}
+<nav class="app-nav">
+  <div class="nav-left">
+    <a href="{{ url_for('dashboard.index') }}" class="nav-logo">CanvasContact<span>Tracker</span></a>
+    <span class="nav-sep">/</span>
+    <a href="{{ url_for('dashboard.course', course_id=course.id) }}" class="nav-course">{{ course.course_code }}</a>
+    <span class="nav-sep">/</span>
+    <span class="nav-student">{{ student_name }}</span>
+  </div>
+  <span class="nav-meta">Spring 2025</span>
+</nav>
+{% endblock %}
+
+{% block extra_styles %}
+  :root {
+    --bg: #f7f7f5;
+    --surface: #ffffff;
+    --border: #e4e2dc;
+    --border-strong: #c8c4bb;
+    --text-primary: #1a1915;
+    --text-secondary: #6b6760;
+    --text-tertiary: #9b9893;
+    --accent: #c44b1e;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+    --nav-bg: #1a1915;
+  }
+
+  body { font-family: var(--sans); background: var(--bg); color: var(--text-primary); min-height: 100vh; }
+  main { max-width: none; margin: 0; padding: 0; }
+
+  .app-nav {
+    background: var(--nav-bg);
+    padding: 0 40px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #2e2c28;
+  }
+  .nav-left { display: flex; align-items: center; }
+  .nav-logo { font-family: var(--mono); font-size: 13px; font-weight: 500; color: #f0ede8; letter-spacing: 0.04em; text-decoration: none; transition: color 0.15s ease; }
+  .nav-logo:hover { color: #ffffff; }
+  .nav-logo span { color: var(--accent); }
+  .nav-sep { font-family: var(--mono); font-size: 13px; color: #3a3835; margin: 0 10px; user-select: none; }
+  .nav-course { font-family: var(--mono); font-size: 12px; font-weight: 500; color: #9b9893; letter-spacing: 0.04em; text-decoration: none; transition: color 0.15s ease; }
+  .nav-course:hover { color: #f0ede8; }
+  .nav-student { font-family: var(--mono); font-size: 12px; font-weight: 500; color: #f0ede8; letter-spacing: 0.04em; }
+  .nav-meta { font-family: var(--mono); font-size: 11px; color: #6b6760; flex-shrink: 0; }
+
+  .page { padding: 36px 40px; }
+
+  h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 4px; }
+  .student-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-tertiary);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+{% endblock %}
+
+{% block content %}
+<div class="page">
+  <div class="student-label">{{ course.course_code }}</div>
+  <h1>{{ student_name }}</h1>
+</div>
+{% endblock %}
