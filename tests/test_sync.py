@@ -20,16 +20,24 @@ def _days_ago(n):
     return (datetime.now(timezone.utc) - timedelta(days=n)).isoformat()
 
 
-def _make_client(enrollments=None, conversations=None, topics=None, entries_by_topic=None):
-    """Return a mock CanvasClient that yields controlled fixture data."""
+def _make_client(enrollments=None, conversations=None, inbox=None,
+                 topics=None, entries_by_topic=None):
+    """Return a mock CanvasClient that yields controlled fixture data.
+
+    conversations: sent (instructor) conversations (scope='sent')
+    inbox:         received conversations (scope='inbox') for student messages
+    """
     mock = MagicMock()
     mock.get_enrollments.return_value = enrollments or []
 
-    convs = conversations or []
-    # Use side_effect so every call returns a fresh iterator (supports running twice)
-    mock.stream_conversations.side_effect = (
-        lambda since=None: iter([(convs, False)] if convs else [])
-    )
+    sent_convs  = conversations or []
+    inbox_convs = inbox or []
+
+    def _stream(since=None, scope='sent'):
+        convs = sent_convs if scope == 'sent' else inbox_convs
+        return iter([(convs, False)] if convs else [])
+
+    mock.stream_conversations.side_effect = _stream
 
     mock.get_discussion_topics.return_value = topics or []
 
@@ -261,3 +269,73 @@ def test_sync_final_count_matches_events_created():
     done = next(m for m in msgs if m['status'] == 'done')
     assert done['count'] == 2
     assert InteractionEvent.query.count() == 2
+
+
+# ---------------------------------------------------------------------------
+# Student messages (inbox)
+# ---------------------------------------------------------------------------
+
+def test_sync_creates_student_message_event():
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        inbox=[{
+            'id': 2001,
+            'last_message_at': _days_ago(2),
+            'participants': [{'id': STUDENT_A}],
+        }],
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    events = InteractionEvent.query.all()
+    assert len(events) == 1
+    assert events[0].event_type == 'student_message'
+    assert events[0].student_canvas_id == STUDENT_A
+    assert events[0].source_id == 2001
+
+
+def test_sync_student_message_ignores_non_enrolled():
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        inbox=[{
+            'id': 2001,
+            'last_message_at': _days_ago(2),
+            'participants': [{'id': 999}],  # not enrolled
+        }],
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    assert InteractionEvent.query.count() == 0
+
+
+def test_sync_student_message_skips_missing_timestamp():
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        inbox=[{
+            'id': 2001,
+            'last_message_at': None,
+            'participants': [{'id': STUDENT_A}],
+        }],
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    assert InteractionEvent.query.count() == 0
+
+
+def test_sync_sent_and_inbox_same_conversation_creates_two_event_types():
+    """Same conversation ID can produce both 'conversation' and 'student_message' rows."""
+    enrollments = [{'user_id': STUDENT_A}]
+    client = _make_client(
+        enrollments=enrollments,
+        conversations=[{'id': 1001, 'last_authored_at': _days_ago(2), 'participants': [{'id': STUDENT_A}]}],
+        inbox=[{'id': 1001, 'last_message_at': _days_ago(1), 'participants': [{'id': STUDENT_A}]}],
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    events = InteractionEvent.query.all()
+    assert len(events) == 2
+    types = {e.event_type for e in events}
+    assert types == {'conversation', 'student_message'}

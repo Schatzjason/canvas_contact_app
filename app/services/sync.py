@@ -59,6 +59,31 @@ def sync_course(course_id):
                 'source_id': conv['id'],
             })
 
+    # --- Student messages (inbox) --------------------------------------------
+    # scope=inbox gives conversations where students wrote to the instructor.
+    # last_message_at is used as the timestamp (best available from the list API).
+    yield {'status': 'fetching', 'item': 'student messages'}
+    inbox = []
+    for page, is_cached in client.stream_conversations(since=cutoff, scope='inbox'):
+        inbox.extend(page)
+        if not is_cached:
+            yield {'status': 'fetching_page', 'item': 'student messages'}
+
+    for conv in inbox:
+        ts_str = conv.get('last_message_at')
+        if not ts_str:
+            continue
+        occurred_at = datetime.fromisoformat(ts_str)
+        participant_ids = {p['id'] for p in conv.get('participants', [])}
+        for student_id in participant_ids & student_ids:
+            events.append({
+                'course_id': course_id,
+                'student_canvas_id': student_id,
+                'event_type': 'student_message',
+                'occurred_at': occurred_at,
+                'source_id': conv['id'],
+            })
+
     # --- Discussion entries + recent_replies ----------------------------------
     yield {'status': 'fetching', 'item': 'discussion topics'}
     topics = client.get_discussion_topics(course_id)

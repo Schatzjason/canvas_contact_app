@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Student Engagement Grid</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --surface: #ffffff;
+    --border: #e4e2dc;
+    --border-strong: #c8c4bb;
+    --text-primary: #1a1915;
+    --text-secondary: #6b6760;
+    --text-tertiary: #9b9893;
+    --text-today: #c44b1e;
+    --tier-hot-bg: #fef2f0;
+    --tier-hot-dot: #e8705a;
+    --tier-warm-bg: #fefbf0;
+    --tier-warm-dot: #d4a012;
+    --tier-ok-bg: #f2f8f4;
+    --tier-ok-dot: #5a9e6e;
+    --icon-message: #3b6fd4;
+    --icon-discussion: #7c4dba;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text-primary);
+    min-height: 100vh;
+    padding: 32px;
+  }
+
+  .page-header { margin-bottom: 28px; }
+
+  .course-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-tertiary);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin-bottom: 16px;
+  }
+
+  .toolbar { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+
+  .flush-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    padding: 5px 11px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+  }
+  .flush-btn:hover { background: var(--border); color: var(--text-primary); }
+  .flush-btn svg { width: 12px; height: 12px; }
+
+  .legend { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .divider { width: 1px; height: 14px; background: var(--border-strong); flex-shrink: 0; }
+
+  /* ── ICON SYSTEM ─────────────────────────────────────────── */
+
+  .icon-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 5px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+  }
+  .icon-wrap svg { width: 15px; height: 15px; }
+
+  /* Message: instructor = solid, student = dashed */
+  .icon-msg         { background: #eef3fc; color: var(--icon-message);    border: 2px solid var(--icon-message); }
+  .icon-msg.student { border-style: dashed; }
+
+  /* Discussion: instructor = solid, student = dashed */
+  .icon-disc         { background: #f3eefb; color: var(--icon-discussion); border: 2px solid var(--icon-discussion); }
+  .icon-disc.student { border-style: dashed; }
+
+  .icon-wrap:hover {
+    transform: scale(1.15) translateY(-1px);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.16);
+    filter: brightness(1.06);
+  }
+
+  /* ── STACKED "BOTH" ICON ─────────────────────────────────── */
+  .icon-stack {
+    position: relative;
+    display: inline-flex;
+    width: 34px;
+    height: 34px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  /* student (dashed) behind, bottom-right */
+  .icon-stack .icon-back {
+    position: absolute;
+    bottom: 0; right: 0;
+    z-index: 1;
+    border-style: dashed;
+    transition: transform 0.12s ease;
+  }
+  /* instructor (solid) in front, top-left */
+  .icon-stack .icon-front {
+    position: absolute;
+    top: 0; left: 0;
+    z-index: 2;
+    border-style: solid;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+  .icon-stack:hover .icon-back  { transform: translate(3px, 3px); }
+  .icon-stack:hover .icon-front { transform: translate(-2px, -2px); box-shadow: 0 3px 8px rgba(0,0,0,0.18); }
+
+  /* ── TABLE ───────────────────────────────────────────────── */
+  .grid-wrapper {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03);
+  }
+
+  table { border-collapse: collapse; width: 100%; }
+
+  thead th {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    letter-spacing: 0.04em;
+    text-align: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    min-width: 42px;
+  }
+  thead th.col-student {
+    text-align: left;
+    padding-left: 18px;
+    min-width: 200px;
+    letter-spacing: 0.06em;
+  }
+  thead th.col-today {
+    color: var(--text-today);
+    font-weight: 600;
+    position: relative;
+  }
+  thead th.col-today::after {
+    content: '';
+    position: absolute;
+    bottom: 3px; left: 50%;
+    transform: translateX(-50%);
+    width: 3px; height: 3px;
+    border-radius: 50%;
+    background: var(--text-today);
+  }
+
+  tbody tr { border-bottom: 1px solid var(--border); transition: filter 0.1s ease; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { filter: brightness(0.97); }
+
+  tr.tier-hot  { background: var(--tier-hot-bg); }
+  tr.tier-warm { background: var(--tier-warm-bg); }
+  tr.tier-ok   { background: var(--tier-ok-bg); }
+
+  td {
+    padding: 0;
+    text-align: center;
+    vertical-align: middle;
+    height: 48px;
+  }
+
+  td.col-student {
+    padding: 10px 16px 10px 18px;
+    text-align: left;
+    border-right: 1px solid var(--border);
+    position: relative;
+  }
+  td.col-student::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 8px; bottom: 8px;
+    width: 3px;
+    border-radius: 0 2px 2px 0;
+  }
+  tr.tier-hot  td.col-student::before { background: var(--tier-hot-dot); }
+  tr.tier-warm td.col-student::before { background: var(--tier-warm-dot); }
+  tr.tier-ok   td.col-student::before { background: var(--tier-ok-dot); }
+
+  td.col-today { position: relative; }
+  td.col-today::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: rgba(196,75,30,0.04);
+    pointer-events: none;
+  }
+
+  .student-name { font-size: 13.5px; font-weight: 500; line-height: 1.2; white-space: nowrap; }
+  .student-ago  { font-family: var(--mono); font-size: 10px; color: var(--text-tertiary); margin-top: 2px; }
+
+  tr.tier-separator td { height: 2px; padding: 0; background: var(--border-strong); }
+</style>
+</head>
+<body>
+
+<svg style="display:none">
+  <symbol id="ico-msg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2 3h12v8H9l-3 2v-2H2z"/>
+  </symbol>
+  <symbol id="ico-disc" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="8" cy="6" r="3.5"/>
+    <path d="M2 14c0-2.5 2.7-4 6-4s6 1.5 6 4"/>
+  </symbol>
+</svg>
+
+<div class="page-header">
+  <div class="course-label">CS 111B · Programming Fundamentals: Java-932</div>
+  <h1>Programming Fundamentals: Java 34872-932</h1>
+  <div class="toolbar">
+    <button class="flush-btn">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5"/><path d="M13.5 2.5v3h-3"/>
+      </svg>
+      flush cache
+    </button>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:var(--tier-ok-dot)"></div>Within 7 days</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--tier-warm-dot)"></div>7–14 days ago</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--tier-hot-dot)"></div>Over 14 days</div>
+      <div class="divider"></div>
+      <div class="legend-item">
+        <span class="icon-wrap icon-msg"><svg><use href="#ico-msg"/></svg></span>
+        Msg: instructor
+      </div>
+      <div class="legend-item">
+        <span class="icon-wrap icon-msg student"><svg><use href="#ico-msg"/></svg></span>
+        Msg: student
+      </div>
+      <div class="legend-item">
+        <span class="icon-stack">
+          <span class="icon-wrap icon-msg icon-back"><svg><use href="#ico-msg"/></svg></span>
+          <span class="icon-wrap icon-msg icon-front"><svg><use href="#ico-msg"/></svg></span>
+        </span>
+        Msg: both
+      </div>
+      <div class="divider"></div>
+      <div class="legend-item">
+        <span class="icon-wrap icon-disc"><svg><use href="#ico-disc"/></svg></span>
+        Disc: instructor
+      </div>
+      <div class="legend-item">
+        <span class="icon-wrap icon-disc student"><svg><use href="#ico-disc"/></svg></span>
+        Disc: student
+      </div>
+      <div class="legend-item">
+        <span class="icon-stack">
+          <span class="icon-wrap icon-disc icon-back"><svg><use href="#ico-disc"/></svg></span>
+          <span class="icon-wrap icon-disc icon-front"><svg><use href="#ico-disc"/></svg></span>
+        </span>
+        Disc: both
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="grid-wrapper">
+<table>
+  <thead>
+    <tr>
+      <th class="col-student">Student</th>
+      <th>2/12</th><th>2/13</th><th>2/14</th><th>2/15</th><th>2/16</th>
+      <th>2/17</th><th>2/18</th><th>2/19</th><th>2/20</th><th>2/21</th>
+      <th>2/22</th><th>2/23</th><th>2/24</th><th>2/25</th><th>2/26</th>
+      <th>2/27</th><th>2/28</th><th>3/1</th><th>3/2</th><th>3/3</th>
+      <th class="col-today">3/4</th>
+    </tr>
+  </thead>
+  <tbody>
+
+    <!-- HOT -->
+    <tr class="tier-hot">
+      <td class="col-student"><div class="student-name">Badamkhand, Enki</div><div class="student-ago">36d ago</div></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="col-today"></td>
+    </tr>
+    <tr class="tier-hot">
+      <td class="col-student"><div class="student-name">Narayanaswamy, Vignesh</div><div class="student-ago">34d ago</div></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="col-today"></td>
+    </tr>
+    <tr class="tier-hot">
+      <td class="col-student"><div class="student-name">Kao, Lihsu</div><div class="student-ago">30d ago</div></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="col-today"></td>
+    </tr>
+    <tr class="tier-hot">
+      <td class="col-student"><div class="student-name">Tan, Tony</div><div class="student-ago">30d ago</div></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="col-today"></td>
+    </tr>
+    <tr class="tier-hot">
+      <td class="col-student"><div class="student-name">Connelly, Lily</div><div class="student-ago">23d ago</div></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="col-today"></td>
+    </tr>
+    <tr class="tier-hot">
+      <td class="col-student"><div class="student-name">Hodgson, In Spire</div><div class="student-ago">23d ago</div></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="col-today"></td>
+    </tr>
+    <tr class="tier-hot">
+      <td class="col-student"><div class="student-name">Montes, Daniel</div><div class="student-ago">23d ago</div></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="col-today"></td>
+    </tr>
+    <tr class="tier-hot">
+      <td class="col-student"><div class="student-name">Eason, Kevin</div><div class="student-ago">16d ago</div></td>
+      <td></td><td></td><td></td><td></td>
+      <td><span class="icon-wrap icon-msg student"><svg><use href="#ico-msg"/></svg></span></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="col-today"></td>
+    </tr>
+    <tr class="tier-hot">
+      <td class="col-student"><div class="student-name">Yang, Tony</div><div class="student-ago">16d ago</div></td>
+      <td></td><td></td><td></td><td></td>
+      <td><span class="icon-wrap icon-msg"><svg><use href="#ico-msg"/></svg></span></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="col-today"></td>
+    </tr>
+
+    <tr class="tier-separator"><td colspan="22"></td></tr>
+
+    <!-- WARM -->
+    <tr class="tier-warm">
+      <td class="col-student"><div class="student-name">Tom, Tom</div><div class="student-ago">10d ago</div></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td>
+      <td><span class="icon-stack">
+        <span class="icon-wrap icon-msg icon-back"><svg><use href="#ico-msg"/></svg></span>
+        <span class="icon-wrap icon-msg icon-front"><svg><use href="#ico-msg"/></svg></span>
+      </span></td>
+      <td></td><td></td>
+      <td><span class="icon-wrap icon-msg"><svg><use href="#ico-msg"/></svg></span></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="col-today"></td>
+    </tr>
+    <tr class="tier-warm">
+      <td class="col-student"><div class="student-name">Wilson, Floritta</div><div class="student-ago">9d ago</div></td>
+      <td></td><td></td><td></td><td></td>
+      <td><span class="icon-wrap icon-msg student"><svg><use href="#ico-msg"/></svg></span></td>
+      <td></td><td></td><td></td><td></td><td></td>
+      <td><span class="icon-wrap icon-msg"><svg><use href="#ico-msg"/></svg></span></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="col-today"></td>
+    </tr>
+    <tr class="tier-warm">
+      <td class="col-student"><div class="student-name">Yanamadala, Ishi</div><div class="student-ago">9d ago</div></td>
+      <td></td><td></td>
+      <td><span class="icon-wrap icon-disc student"><svg><use href="#ico-disc"/></svg></span></td>
+      <td></td>
+      <td><span class="icon-stack">
+        <span class="icon-wrap icon-disc icon-back"><svg><use href="#ico-disc"/></svg></span>
+        <span class="icon-wrap icon-disc icon-front"><svg><use href="#ico-disc"/></svg></span>
+      </span></td>
+      <td></td><td></td><td></td><td></td><td></td>
+      <td><span class="icon-wrap icon-disc"><svg><use href="#ico-disc"/></svg></span></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="col-today"></td>
+    </tr>
+
+    <tr class="tier-separator"><td colspan="22"></td></tr>
+
+    <!-- OK -->
+    <tr class="tier-ok">
+      <td class="col-student"><div class="student-name">Nguyen, Rocky</div><div class="student-ago">7d ago</div></td>
+      <td></td><td></td><td></td>
+      <td><span class="icon-wrap icon-msg"><svg><use href="#ico-msg"/></svg></span></td>
+      <td></td><td></td><td></td>
+      <td><span class="icon-wrap icon-msg student"><svg><use href="#ico-msg"/></svg></span></td>
+      <td></td><td></td><td></td>
+      <td><span class="icon-wrap icon-msg"><svg><use href="#ico-msg"/></svg></span></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="col-today"></td>
+    </tr>
+    <tr class="tier-ok">
+      <td class="col-student"><div class="student-name">Pham, William</div><div class="student-ago">4d ago</div></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td>
+      <td><span class="icon-wrap icon-msg"><svg><use href="#ico-msg"/></svg></span></td>
+      <td><span class="icon-wrap icon-msg student"><svg><use href="#ico-msg"/></svg></span></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+      <td><span class="icon-stack">
+        <span class="icon-wrap icon-msg icon-back"><svg><use href="#ico-msg"/></svg></span>
+        <span class="icon-wrap icon-msg icon-front"><svg><use href="#ico-msg"/></svg></span>
+      </span></td>
+      <td></td><td></td><td></td><td class="col-today"></td>
+    </tr>
+    <tr class="tier-ok">
+      <td class="col-student"><div class="student-name">Au, Steven</div><div class="student-ago">3d ago</div></td>
+      <td></td>
+      <td><span class="icon-wrap icon-disc student"><svg><use href="#ico-disc"/></svg></span></td>
+      <td></td><td></td><td></td><td></td>
+      <td><span class="icon-wrap icon-msg"><svg><use href="#ico-msg"/></svg></span></td>
+      <td></td><td></td><td></td>
+      <td><span class="icon-wrap icon-msg student"><svg><use href="#ico-msg"/></svg></span></td>
+      <td></td><td></td><td></td>
+      <td><span class="icon-wrap icon-msg"><svg><use href="#ico-msg"/></svg></span></td>
+      <td></td>
+      <td><span class="icon-stack">
+        <span class="icon-wrap icon-msg icon-back"><svg><use href="#ico-msg"/></svg></span>
+        <span class="icon-wrap icon-msg icon-front"><svg><use href="#ico-msg"/></svg></span>
+      </span></td>
+      <td></td><td></td><td class="col-today"></td>
+    </tr>
+    <tr class="tier-ok">
+      <td class="col-student"><div class="student-name">Chen, Natalie</div><div class="student-ago">3d ago</div></td>
+      <td></td><td></td>
+      <td><span class="icon-wrap icon-msg student"><svg><use href="#ico-msg"/></svg></span></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+      <td><span class="icon-wrap icon-msg"><svg><use href="#ico-msg"/></svg></span></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+      <td><span class="icon-wrap icon-msg"><svg><use href="#ico-msg"/></svg></span></td>
+      <td class="col-today"></td>
+    </tr>
+    <tr class="tier-ok">
+      <td class="col-student"><div class="student-name">Hairston, Tymeir</div><div class="student-ago">2d ago</div></td>
+      <td></td>
+      <td><span class="icon-wrap icon-disc"><svg><use href="#ico-disc"/></svg></span></td>
+      <td><span class="icon-wrap icon-msg student"><svg><use href="#ico-msg"/></svg></span></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+      <td class="col-today"><span class="icon-stack">
+        <span class="icon-wrap icon-msg icon-back"><svg><use href="#ico-msg"/></svg></span>
+        <span class="icon-wrap icon-msg icon-front"><svg><use href="#ico-msg"/></svg></span>
+      </span></td>
+    </tr>
+
+  </tbody>
+</table>
+</div>
+
+</body>
+</html>

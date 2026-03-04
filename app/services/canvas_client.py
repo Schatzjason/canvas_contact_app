@@ -155,8 +155,10 @@ class CanvasClient:
             ttl=TTL_CONVERSATIONS,
         )
 
-    def stream_conversations(self, since=None):
-        """Generator that yields pages of sent conversations one at a time.
+    def stream_conversations(self, since=None, scope='sent'):
+        """Generator that yields pages of conversations one at a time.
+
+        scope: 'sent' for instructor-sent, 'inbox' for received (student-initiated).
 
         Yields (page, is_cached):
           - is_cached=True  → single yield of the full cached list
@@ -164,7 +166,7 @@ class CanvasClient:
 
         Writes the combined result to cache after all pages are fetched.
         """
-        params = {'scope': 'sent'}
+        params = {'scope': scope}
         if since is not None:
             params['start_time'] = since.strftime('%Y-%m-%dT%H:%M:%SZ')
 

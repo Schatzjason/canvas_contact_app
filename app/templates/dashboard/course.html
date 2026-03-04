@@ -230,6 +230,10 @@
         Instructor msg
       </div>
       <div class="legend-item">
+        <span class="icon-wrap icon-msg student"><svg><use href="#ico-msg"/></svg></span>
+        Student msg
+      </div>
+      <div class="legend-item">
         <span class="icon-wrap icon-disc student"><svg><use href="#ico-disc"/></svg></span>
         Student discussion
       </div>
@@ -266,15 +270,26 @@
             {% set types = student.active_days.get(day) %}
             <td{% if day == today %} class="col-today"{% endif %}>
               {%- if types -%}
-                {%- set has_msg  = 'conversation' in types -%}
-                {%- set has_disc = 'discussion_entry' in types or 'discussion_reply' in types -%}
-                {%- if has_msg and has_disc -%}
-                  <span class="icon-stack" title="Instructor message + student discussion">
+                {%- set has_instr_msg = 'conversation' in types -%}
+                {%- set has_stud_msg  = 'student_message' in types -%}
+                {%- set has_disc      = 'discussion_entry' in types or 'discussion_reply' in types -%}
+                {%- set has_any_msg   = has_instr_msg or has_stud_msg -%}
+                {%- if has_any_msg and has_disc -%}
+                  {# message + discussion: stack, msg front, disc back #}
+                  <span class="icon-stack">
                     <span class="icon-wrap icon-disc student icon-back"><svg><use href="#ico-disc"/></svg></span>
+                    <span class="icon-wrap icon-msg{% if not has_instr_msg %} student{% endif %} icon-front"><svg><use href="#ico-msg"/></svg></span>
+                  </span>
+                {%- elif has_instr_msg and has_stud_msg -%}
+                  {# both instructor and student messages: stack same-type #}
+                  <span class="icon-stack">
+                    <span class="icon-wrap icon-msg student icon-back"><svg><use href="#ico-msg"/></svg></span>
                     <span class="icon-wrap icon-msg icon-front"><svg><use href="#ico-msg"/></svg></span>
                   </span>
-                {%- elif has_msg -%}
+                {%- elif has_instr_msg -%}
                   <span class="icon-wrap icon-msg" title="Instructor message"><svg><use href="#ico-msg"/></svg></span>
+                {%- elif has_stud_msg -%}
+                  <span class="icon-wrap icon-msg student" title="Student message"><svg><use href="#ico-msg"/></svg></span>
                 {%- elif has_disc -%}
                   <span class="icon-wrap icon-disc student" title="Student discussion"><svg><use href="#ico-disc"/></svg></span>
                 {%- endif -%}
