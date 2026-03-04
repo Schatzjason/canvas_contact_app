@@ -62,11 +62,27 @@
     text-transform: uppercase;
     margin-bottom: 6px;
   }
+  .name-row { display: flex; align-items: center; gap: 10px; }
+  .staleness-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .staleness-dot.green  { background: #5a9e6e; }
+  .staleness-dot.yellow { background: #d4a012; }
+  .staleness-dot.red    { background: #e8705a; }
+  .days-ago { font-family: var(--mono); font-size: 12px; color: var(--text-secondary); }
 {% endblock %}
 
 {% block content %}
 <div class="page">
   <div class="student-label">{{ course.course_code }}</div>
-  <h1>{{ student_name }}</h1>
+  <div class="name-row">
+    <h1>{{ student_name }}</h1>
+    <span class="staleness-dot {{ staleness }}"></span>
+    <span class="days-ago">
+      {%- if days_since is none %}no contact
+      {%- elif days_since == 0 %}today
+      {%- elif days_since == 1 %}1 day ago
+      {%- else %}{{ days_since }} days ago
+      {%- endif %}
+    </span>
+  </div>
 </div>
 {% endblock %}

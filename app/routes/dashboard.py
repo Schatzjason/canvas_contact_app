@@ -326,8 +326,33 @@ def student(course_id, student_id):
     else:
         student_name = f'Student {student_id}'
 
+    now = datetime.now(timezone.utc)
+    warn_days  = current_app.config['STALE_WARN_DAYS']
+    alert_days = current_app.config['STALE_ALERT_DAYS']
+
+    last_at = db.session.query(
+        func.max(InteractionEvent.occurred_at)
+    ).filter(
+        InteractionEvent.course_id == course_id,
+        InteractionEvent.student_canvas_id == student_id,
+    ).scalar()
+
+    if last_at is None:
+        days_since = None
+        staleness  = 'red'
+    else:
+        days_since = (now - last_at).days
+        if days_since <= warn_days:
+            staleness = 'green'
+        elif days_since <= alert_days:
+            staleness = 'yellow'
+        else:
+            staleness = 'red'
+
     return render_template('dashboard/student.html',
         course=course_obj,
         student_id=student_id,
         student_name=student_name,
+        days_since=days_since,
+        staleness=staleness,
     )
