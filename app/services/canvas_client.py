@@ -10,8 +10,8 @@ from app import db
 from app.models.canvas_cache import CanvasCache
 
 # Cache TTLs (seconds)
-TTL_CONVERSATIONS = 24 * 60 * 60
-TTL_DISCUSSION_ENTRIES = 24 * 60 * 60
+TTL_CONVERSATIONS = 2 * 60
+TTL_DISCUSSION_ENTRIES = 5 * 60
 TTL_ENROLLMENTS = 24 * 60 * 60
 
 
@@ -164,25 +164,29 @@ class CanvasClient:
 
         scope: 'sent' for instructor-sent, 'inbox' for received (student-initiated).
 
+        The cache key is stable (scope only — no since date), so the 24 h cache
+        is not invalidated when the since window changes between syncs.
+
         Yields (page, is_cached):
           - is_cached=True  → single yield of the full cached list
           - is_cached=False → one yield per HTTP page as it arrives
 
         Writes the combined result to cache after all pages are fetched.
         """
-        params = {'scope': scope}
-        if since is not None:
-            params['start_time'] = since.strftime('%Y-%m-%dT%H:%M:%SZ')
-
-        cache_key = self._make_cache_key('/api/v1/conversations', params)
+        # Stable key: only scope, not since — so cache survives between syncs
+        cache_key = self._make_cache_key('/api/v1/conversations', {'scope': scope})
         cached = self._cache_read(cache_key)
         if cached is not None:
             yield cached, True
             return
 
+        api_params = {'scope': scope}
+        if since is not None:
+            api_params['start_time'] = since.strftime('%Y-%m-%dT%H:%M:%SZ')
+
         results = []
         next_url = f'{self.base_url}/api/v1/conversations'
-        next_params = {'per_page': 100, **params}
+        next_params = {'per_page': 100, **api_params}
 
         while next_url:
             resp = requests.get(

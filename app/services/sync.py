@@ -5,8 +5,36 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app import db
+from app.models.canvas_cache import CanvasCache
 from app.models.interaction_event import InteractionEvent
 from app.services.canvas_client import CanvasClient
+
+# Stored as CanvasCache rows with these keys; cleared automatically when user flushes cache.
+_MARKER_TTL = 10 * 365 * 24 * 3600  # ~10 years — never expires on its own
+
+
+def _get_sync_marker(course_id, scope):
+    """Return the datetime of the last live Canvas fetch for this scope, or None."""
+    key = f'sync_marker:{scope}:{course_id}'
+    entry = CanvasCache.query.filter_by(cache_key=key).first()
+    return entry.fetched_at if entry else None
+
+
+def _set_sync_marker(course_id, scope):
+    """Record now as the last live Canvas fetch time for this scope."""
+    key = f'sync_marker:{scope}:{course_id}'
+    now = datetime.now(timezone.utc)
+    entry = CanvasCache.query.filter_by(cache_key=key).first()
+    if entry:
+        entry.fetched_at = now
+    else:
+        db.session.add(CanvasCache(
+            cache_key=key,
+            response_json=[],
+            fetched_at=now,
+            ttl_seconds=_MARKER_TTL,
+        ))
+    db.session.commit()
 
 FIXTURES_DIR = pathlib.Path(__file__).parent.parent.parent / 'fixtures'
 
@@ -73,11 +101,17 @@ def sync_course(course_id):
     # scope=sent means messages the instructor sent; participants includes all
     # people in the thread.  We record one event per enrolled student per convo.
     yield {'status': 'fetching', 'item': 'conversations'}
+    last_conv_sync = _get_sync_marker(course_id, 'conv_sent')
+    conv_since = last_conv_sync if last_conv_sync else cutoff
     conversations = []
-    for page, is_cached in client.stream_conversations(since=cutoff):
+    fetched_live = False
+    for page, is_cached in client.stream_conversations(since=conv_since):
         conversations.extend(page)
         if not is_cached:
+            fetched_live = True
             yield {'status': 'fetching_page', 'item': 'conversations'}
+    if fetched_live:
+        _set_sync_marker(course_id, 'conv_sent')
 
     for conv in conversations:
         ts_str = conv.get('last_authored_at') or conv.get('last_message_at')
@@ -98,11 +132,17 @@ def sync_course(course_id):
     # scope=inbox gives conversations where students wrote to the instructor.
     # last_message_at is used as the timestamp (best available from the list API).
     yield {'status': 'fetching', 'item': 'student messages'}
+    last_inbox_sync = _get_sync_marker(course_id, 'conv_inbox')
+    inbox_since = last_inbox_sync if last_inbox_sync else cutoff
     inbox = []
-    for page, is_cached in client.stream_conversations(since=cutoff, scope='inbox'):
+    fetched_live = False
+    for page, is_cached in client.stream_conversations(since=inbox_since, scope='inbox'):
         inbox.extend(page)
         if not is_cached:
+            fetched_live = True
             yield {'status': 'fetching_page', 'item': 'student messages'}
+    if fetched_live:
+        _set_sync_marker(course_id, 'conv_inbox')
 
     for conv in inbox:
         ts_str = conv.get('last_message_at')

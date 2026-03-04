@@ -508,6 +508,14 @@ def compose(course_id, student_id):
         print(f'  Subject: {subject}')
         print(f'  Body:\n{body}')
         print(f'{"="*60}\n')
+
+        # Invalidate conversation cache so the next sync picks up the sent message
+        from app.services.canvas_client import CanvasClient
+        for scope in ('sent', 'inbox'):
+            key = CanvasClient._make_cache_key('/api/v1/conversations', {'scope': scope})
+            CanvasCache.query.filter_by(cache_key=key).delete()
+        db.session.commit()
+
         flash(f'[Stub] Message to {student_name} printed to terminal.')
         return redirect(url_for('dashboard.student', course_id=course_id, student_id=student_id))
 
