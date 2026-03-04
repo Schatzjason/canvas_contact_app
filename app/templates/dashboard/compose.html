@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Compose — {{ student_name }}{% endblock %}
+
+{% block nav %}
+<nav class="app-nav">
+  <div class="nav-left">
+    <a href="{{ url_for('dashboard.index') }}" class="nav-logo">CanvasContact<span>Tracker</span></a>
+    <span class="nav-sep">/</span>
+    <a href="{{ url_for('dashboard.course', course_id=course.id) }}" class="nav-course">{{ course.course_code }}</a>
+    <span class="nav-sep">/</span>
+    <a href="{{ url_for('dashboard.student', course_id=course.id, student_id=student_id) }}" class="nav-student-link">{{ student_name }}</a>
+    <span class="nav-sep">/</span>
+    <span class="nav-compose">Compose</span>
+  </div>
+  <span class="nav-meta">Spring 2025</span>
+</nav>
+{% endblock %}
+
+{% block extra_styles %}
+  :root {
+    --bg: #f7f7f5;
+    --surface: #ffffff;
+    --border: #e4e2dc;
+    --border-strong: #c8c4bb;
+    --text-primary: #1a1915;
+    --text-secondary: #6b6760;
+    --text-tertiary: #9b9893;
+    --accent: #c44b1e;
+    --icon-message: #3b6fd4;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+    --nav-bg: #1a1915;
+  }
+
+  body { font-family: var(--sans); background: var(--bg); color: var(--text-primary); min-height: 100vh; }
+  main { max-width: none; margin: 0; padding: 0; }
+
+  /* ── NAV ─────────────────────────────────────────────────── */
+  .app-nav {
+    background: var(--nav-bg);
+    padding: 0 40px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #2e2c28;
+  }
+  .nav-left { display: flex; align-items: center; }
+  .nav-logo { font-family: var(--mono); font-size: 13px; font-weight: 500; color: #f0ede8; letter-spacing: 0.04em; text-decoration: none; transition: color 0.15s; }
+  .nav-logo:hover { color: #ffffff; }
+  .nav-logo span { color: var(--accent); }
+  .nav-sep { font-family: var(--mono); font-size: 13px; color: #3a3835; margin: 0 10px; user-select: none; }
+  .nav-course { font-family: var(--mono); font-size: 12px; font-weight: 500; color: #9b9893; letter-spacing: 0.04em; text-decoration: none; transition: color 0.15s; }
+  .nav-course:hover { color: #f0ede8; }
+  .nav-student-link { font-family: var(--mono); font-size: 12px; font-weight: 500; color: #9b9893; letter-spacing: 0.04em; text-decoration: none; transition: color 0.15s; }
+  .nav-student-link:hover { color: #f0ede8; }
+  .nav-compose { font-family: var(--mono); font-size: 12px; font-weight: 500; color: #f0ede8; letter-spacing: 0.04em; }
+  .nav-meta { font-family: var(--mono); font-size: 11px; color: #6b6760; flex-shrink: 0; }
+
+  /* ── PAGE ────────────────────────────────────────────────── */
+  .page { padding: 36px 40px; }
+
+  .compose-label { font-family: var(--mono); font-size: 11px; color: var(--text-tertiary); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+  h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 28px; }
+
+  .compose-form { max-width: 640px; display: flex; flex-direction: column; gap: 18px; }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); }
+  .field input, .field textarea {
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-family: var(--sans);
+    font-size: 14px;
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    resize: vertical;
+  }
+  .field input:focus, .field textarea:focus {
+    border-color: var(--icon-message);
+    box-shadow: 0 0 0 3px rgba(59, 111, 212, 0.12);
+  }
+  .field textarea { min-height: 200px; line-height: 1.6; }
+
+  .form-actions { display: flex; gap: 10px; align-items: center; }
+  .btn-send {
+    padding: 9px 22px;
+    background: var(--icon-message);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s, box-shadow 0.15s;
+  }
+  .btn-send:hover { background: #2d5cbf; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
+  .btn-cancel {
+    padding: 9px 18px;
+    background: none;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    font-family: var(--sans);
+    font-size: 14px;
+    text-decoration: none;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .btn-cancel:hover { border-color: var(--text-secondary); color: var(--text-primary); }
+
+  .stub-notice {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-left: 6px;
+  }
+  .stub-dot { width: 6px; height: 6px; border-radius: 50%; background: #d4a012; flex-shrink: 0; }
+{% endblock %}
+
+{% block content %}
+<div class="page">
+  <div class="compose-label">{{ course.course_code }}</div>
+  <h1>Message to {{ student_name }}</h1>
+
+  <form class="compose-form" method="POST">
+    <div class="field">
+      <label for="subject">Subject</label>
+      <input type="text" id="subject" name="subject" value="{{ default_subject }}" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="body">Message</label>
+      <textarea id="body" name="body">{{ default_body }}</textarea>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn-send">Send Message</button>
+      <a href="{{ url_for('dashboard.student', course_id=course.id, student_id=student_id) }}" class="btn-cancel">Cancel</a>
+      <span class="stub-notice"><span class="stub-dot"></span>stub — prints to terminal</span>
+    </div>
+  </form>
+</div>
+{% endblock %}

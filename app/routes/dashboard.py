@@ -5,7 +5,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from flask import Blueprint, Response, current_app, flash, render_template, stream_with_context
 from sqlalchemy import func, text
 
-from flask import redirect, url_for
+from flask import redirect, request, url_for
 
 from app import db
 from app.models.canvas_cache import CanvasCache
@@ -471,4 +471,54 @@ def student(course_id, student_id):
         today=today,
         active_days=active_days,
         day_drawer=day_drawer,
+    )
+
+
+@bp.route('/course/<int:course_id>/student/<int:student_id>/compose', methods=['GET', 'POST'])
+def compose(course_id, student_id):
+    client = CanvasClient()
+
+    try:
+        course_obj = client.get_course(course_id)
+    except Exception as exc:
+        flash(f'Could not load course info: {exc}')
+        course_obj = {'name': f'Course {course_id}', 'course_code': '', 'id': course_id}
+
+    try:
+        enrollments = client.get_enrollments(course_id)
+    except Exception as exc:
+        flash(f'Could not load enrollments: {exc}')
+        enrollments = []
+
+    student_enrollment = next(
+        (e for e in enrollments if e['user_id'] == student_id), None
+    )
+    student_name = (
+        student_enrollment['user'].get('name', f'Student {student_id}')
+        if student_enrollment else f'Student {student_id}'
+    )
+
+    if request.method == 'POST':
+        subject = request.form.get('subject', '').strip()
+        body    = request.form.get('body', '').strip()
+        print(f'\n{"="*60}')
+        print(f'[STUB] Canvas inbox message')
+        print(f'  To:      {student_name} (canvas_id={student_id})')
+        print(f'  Course:  {course_obj.get("course_code", course_id)} (id={course_id})')
+        print(f'  Subject: {subject}')
+        print(f'  Body:\n{body}')
+        print(f'{"="*60}\n')
+        flash(f'[Stub] Message to {student_name} printed to terminal.')
+        return redirect(url_for('dashboard.student', course_id=course_id, student_id=student_id))
+
+    first_name = student_name.split()[0] if student_name else ''
+    default_subject = 'Check in'
+    default_body    = f'Hi {first_name}, ' if first_name else ''
+
+    return render_template('dashboard/compose.html',
+        course=course_obj,
+        student_id=student_id,
+        student_name=student_name,
+        default_subject=default_subject,
+        default_body=default_body,
     )
