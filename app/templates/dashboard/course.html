@@ -1,6 +1,17 @@
 {% extends "base.html" %}
 {% block title %}{{ course.name }} — Canvas Tracker{% endblock %}
 
+{% block nav %}
+<nav class="app-nav">
+  <div class="nav-left">
+    <a href="{{ url_for('dashboard.index') }}" class="nav-logo">CanvasContact<span>Tracker</span></a>
+    <span class="nav-sep">/</span>
+    <span class="nav-course">{{ course.course_code }}</span>
+  </div>
+  <span class="nav-meta">Spring 2025</span>
+</nav>
+{% endblock %}
+
 {% block extra_styles %}
   :root {
     --bg: #f7f7f5;
@@ -19,13 +30,35 @@
     --tier-ok-dot: #5a9e6e;
     --icon-message: #3b6fd4;
     --icon-discussion: #7c4dba;
+    --nav-bg: #1a1915;
+    --nav-sub: #6b6760;
     --mono: 'IBM Plex Mono', monospace;
     --sans: 'IBM Plex Sans', sans-serif;
   }
 
-  body { font-family: var(--sans); }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text-primary); min-height: 100vh; }
+  main { max-width: none; margin: 0; padding: 0; }
 
-  .page-header { margin-bottom: 24px; }
+  .app-nav {
+    background: var(--nav-bg);
+    padding: 0 40px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #2e2c28;
+  }
+  .nav-left { display: flex; align-items: center; }
+  .nav-logo { font-family: var(--mono); font-size: 13px; font-weight: 500; color: #f0ede8; letter-spacing: 0.04em; text-decoration: none; transition: color 0.15s ease; }
+  .nav-logo:hover { color: #ffffff; }
+  .nav-logo span { color: var(--text-today); }
+  .nav-sep { font-family: var(--mono); font-size: 13px; color: #3a3835; margin: 0 10px; user-select: none; }
+  .nav-course { font-family: var(--mono); font-size: 12px; font-weight: 500; color: #9b9893; letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 340px; }
+  .nav-meta { font-family: var(--mono); font-size: 11px; color: var(--nav-sub); flex-shrink: 0; }
+
+  .page { padding: 36px 40px; }
+
+  .page-header { margin-bottom: 28px; }
 
   .course-label {
     font-family: var(--mono);
@@ -208,6 +241,7 @@
 {% endblock %}
 
 {% block content %}
+<div class="page">
 <div class="page-header">
   <div class="course-label">{{ course.course_code }}</div>
   <h1>{{ course.name }}</h1>
@@ -226,20 +260,31 @@
       <div class="legend-item"><div class="legend-dot" style="background:var(--tier-hot-dot)"></div>Over {{ config.STALE_ALERT_DAYS }} days or never</div>
       <div class="divider"></div>
       <div class="legend-item">
-        <span class="icon-wrap icon-msg"><svg><use href="#ico-msg"/></svg></span>
-        Instructor msg
+        <span class="icon-wrap icon-msg"><svg><use href="#ico-msg"/></svg></span>Msg: instructor
       </div>
       <div class="legend-item">
-        <span class="icon-wrap icon-msg student"><svg><use href="#ico-msg"/></svg></span>
-        Student msg
+        <span class="icon-wrap icon-msg student"><svg><use href="#ico-msg"/></svg></span>Msg: student
       </div>
       <div class="legend-item">
-        <span class="icon-wrap icon-disc student"><svg><use href="#ico-disc"/></svg></span>
-        Student discussion
+        <span class="icon-stack">
+          <span class="icon-wrap icon-msg icon-back"><svg><use href="#ico-msg"/></svg></span>
+          <span class="icon-wrap icon-msg icon-front"><svg><use href="#ico-msg"/></svg></span>
+        </span>
+        Msg: both
+      </div>
+      <div class="divider"></div>
+      <div class="legend-item">
+        <span class="icon-wrap icon-disc"><svg><use href="#ico-disc"/></svg></span>Disc: instructor
       </div>
       <div class="legend-item">
-        <span class="icon-wrap icon-disc"><svg><use href="#ico-disc"/></svg></span>
-        Instructor replied
+        <span class="icon-wrap icon-disc student"><svg><use href="#ico-disc"/></svg></span>Disc: student
+      </div>
+      <div class="legend-item">
+        <span class="icon-stack">
+          <span class="icon-wrap icon-disc icon-back"><svg><use href="#ico-disc"/></svg></span>
+          <span class="icon-wrap icon-disc icon-front"><svg><use href="#ico-disc"/></svg></span>
+        </span>
+        Disc: both
       </div>
     </div>
   </div>
@@ -317,4 +362,5 @@
 {% if not students %}
   <p style="color:var(--text-secondary); margin-top:1rem; font-size:0.9rem;">No enrolled students found.</p>
 {% endif %}
+</div>{# .page #}
 {% endblock %}
