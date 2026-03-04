@@ -347,30 +347,31 @@
                 {%- set has_any_msg    = has_instr_msg or has_stud_msg -%}
                 {%- set has_any_disc   = has_stud_disc or has_instr_disc -%}
                 {%- set disc_msg = disc_messages.get((student.canvas_id, day), '') -%}
+                {%- set msg_txt  = msg_texts.get((student.canvas_id, day), '') -%}
                 {%- if has_any_msg and has_any_disc -%}
                   {# message + discussion: stack, appropriate variant for each #}
-                  <span class="icon-stack"{% if disc_msg %} data-disc-msg="{{ disc_msg | e }}"{% endif %}>
+                  <span class="icon-stack"{% if disc_msg %} data-hover-text="{{ disc_msg | e }}"{% endif %}>
                     <span class="icon-wrap icon-disc{% if not has_instr_disc %} student{% endif %} icon-back"><svg><use href="#ico-disc"/></svg></span>
-                    <span class="icon-wrap icon-msg{% if not has_instr_msg %} student{% endif %} icon-front"><svg><use href="#ico-msg"/></svg></span>
+                    <span class="icon-wrap icon-msg{% if not has_instr_msg %} student{% endif %} icon-front"{% if msg_txt %} data-hover-text="{{ msg_txt | e }}"{% endif %}><svg><use href="#ico-msg"/></svg></span>
                   </span>
                 {%- elif has_instr_msg and has_stud_msg -%}
-                  <span class="icon-stack">
+                  <span class="icon-stack"{% if msg_txt %} data-hover-text="{{ msg_txt | e }}"{% endif %}>
                     <span class="icon-wrap icon-msg student icon-back"><svg><use href="#ico-msg"/></svg></span>
                     <span class="icon-wrap icon-msg icon-front"><svg><use href="#ico-msg"/></svg></span>
                   </span>
                 {%- elif has_instr_msg -%}
-                  <span class="icon-wrap icon-msg" title="Instructor message"><svg><use href="#ico-msg"/></svg></span>
+                  <span class="icon-wrap icon-msg" title="Instructor message"{% if msg_txt %} data-hover-text="{{ msg_txt | e }}"{% endif %}><svg><use href="#ico-msg"/></svg></span>
                 {%- elif has_stud_msg -%}
-                  <span class="icon-wrap icon-msg student" title="Student message"><svg><use href="#ico-msg"/></svg></span>
+                  <span class="icon-wrap icon-msg student" title="Student message"{% if msg_txt %} data-hover-text="{{ msg_txt | e }}"{% endif %}><svg><use href="#ico-msg"/></svg></span>
                 {%- elif has_instr_disc and has_stud_disc -%}
-                  <span class="icon-stack"{% if disc_msg %} data-disc-msg="{{ disc_msg | e }}"{% endif %}>
+                  <span class="icon-stack"{% if disc_msg %} data-hover-text="{{ disc_msg | e }}"{% endif %}>
                     <span class="icon-wrap icon-disc student icon-back"><svg><use href="#ico-disc"/></svg></span>
                     <span class="icon-wrap icon-disc icon-front"><svg><use href="#ico-disc"/></svg></span>
                   </span>
                 {%- elif has_instr_disc -%}
-                  <span class="icon-wrap icon-disc" title="Instructor replied to discussion"{% if disc_msg %} data-disc-msg="{{ disc_msg | e }}"{% endif %}><svg><use href="#ico-disc"/></svg></span>
+                  <span class="icon-wrap icon-disc" title="Instructor replied to discussion"{% if disc_msg %} data-hover-text="{{ disc_msg | e }}"{% endif %}><svg><use href="#ico-disc"/></svg></span>
                 {%- elif has_stud_disc -%}
-                  <span class="icon-wrap icon-disc student" title="Student discussion"{% if disc_msg %} data-disc-msg="{{ disc_msg | e }}"{% endif %}><svg><use href="#ico-disc"/></svg></span>
+                  <span class="icon-wrap icon-disc student" title="Student discussion"{% if disc_msg %} data-hover-text="{{ disc_msg | e }}"{% endif %}><svg><use href="#ico-disc"/></svg></span>
                 {%- endif -%}
               {%- endif -%}
             </td>
@@ -395,7 +396,7 @@
 
   function show(el, e) {
     clearTimeout(hideTimer);
-    popup.textContent = el.dataset.discMsg;
+    popup.textContent = el.dataset.hoverText;
     popup.style.display = 'block';
     position(e);
   }
@@ -415,14 +416,14 @@
   }
 
   document.addEventListener('mouseover', (e) => {
-    const el = e.target.closest('[data-disc-msg]');
+    const el = e.target.closest('[data-hover-text]');
     if (el) show(el, e);
   });
   document.addEventListener('mouseout', (e) => {
-    if (e.target.closest('[data-disc-msg]')) hide();
+    if (e.target.closest('[data-hover-text]')) hide();
   });
   document.addEventListener('mousemove', (e) => {
-    if (popup.style.display === 'block' && e.target.closest('[data-disc-msg]')) position(e);
+    if (popup.style.display === 'block' && e.target.closest('[data-hover-text]')) position(e);
   });
 
   popup.addEventListener('mouseenter', () => clearTimeout(hideTimer));

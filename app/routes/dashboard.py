@@ -195,6 +195,7 @@ def course(course_id):
     # active_days_by_student: {student_id: {date: set(event_types)}}
     active_days_by_student = {}
     disc_source_ids = {}  # {(student_id, date): [source_id, ...]}
+    msg_source_ids  = {}  # {(student_id, date): [source_id, ...]}
     for event in InteractionEvent.query.filter(
         InteractionEvent.course_id == course_id,
         InteractionEvent.occurred_at >= window_start_dt,
@@ -204,6 +205,8 @@ def course(course_id):
         active_days_by_student.setdefault(sid, {}).setdefault(day, set()).add(event.event_type)
         if event.event_type in ('discussion_entry', 'discussion_reply'):
             disc_source_ids.setdefault((sid, day), []).append(event.source_id)
+        if event.event_type in ('conversation', 'student_message'):
+            msg_source_ids.setdefault((sid, day), []).append(event.source_id)
 
     # Fetch discussion message text from the canvas cache
     disc_messages = {}
@@ -229,6 +232,34 @@ def course(course_id):
             texts = [msg_by_source[s] for s in source_ids if s in msg_by_source]
             if texts:
                 disc_messages[(sid, day)] = '\n\n---\n\n'.join(texts)
+
+    # Fetch conversation text from the canvas cache
+    msg_texts = {}
+    all_msg_ids = [src for ids in msg_source_ids.values() for src in ids]
+    if all_msg_ids:
+        rows = db.session.execute(text("""
+            SELECT (e->>'id')::bigint AS source_id,
+                   e->>'subject'              AS subject,
+                   e->>'last_authored_message' AS authored,
+                   e->>'last_message'          AS last_msg
+            FROM canvas_cache,
+                 jsonb_array_elements(response_json::jsonb) AS e
+            WHERE e->>'subject' IS NOT NULL
+              AND (e->>'id')::bigint = ANY(:ids)
+        """), {'ids': all_msg_ids}).fetchall()
+        conv_by_source = {}
+        for row in rows:
+            parts = []
+            if row.subject:
+                parts.append(f'Subject: {row.subject}')
+            body = row.authored or row.last_msg
+            if body:
+                parts.append(body)
+            conv_by_source[row.source_id] = '\n\n'.join(parts)
+        for (sid, day), source_ids in msg_source_ids.items():
+            texts = [conv_by_source[s] for s in source_ids if s in conv_by_source]
+            if texts:
+                msg_texts[(sid, day)] = '\n\n---\n\n'.join(texts)
 
     students = []
     for enrollment in enrollments:
@@ -266,4 +297,5 @@ def course(course_id):
         days=days,
         today=today,
         disc_messages=disc_messages,
+        msg_texts=msg_texts,
     )
