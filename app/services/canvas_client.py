@@ -123,6 +123,10 @@ class CanvasClient:
     # Public API methods                                                   #
     # ------------------------------------------------------------------ #
 
+    def get_current_user(self):
+        """Fetch the authenticated user's profile (always live)."""
+        return self._get('/api/v1/users/self')
+
     def get_course(self, course_id):
         """Fetch a single course object (always live)."""
         return self._get(f'/api/v1/courses/{course_id}')

@@ -34,6 +34,8 @@ def sync_course(course_id):
         yield {'status': 'done', 'count': 0}
         return
 
+    instructor_id = client.get_current_user()['id']
+
     # --- Conversations -------------------------------------------------------
     # scope=sent means messages the instructor sent; participants includes all
     # people in the thread.  We record one event per enrolled student per convo.
@@ -102,14 +104,25 @@ def sync_course(course_id):
                     'occurred_at': entry_at,
                     'source_id': entry['id'],
                 })
-            # TODO: recurse into full reply threads (not just recent_replies)
             for reply in entry.get('recent_replies', []):
                 reply_at = datetime.fromisoformat(reply['created_at'])
-                if reply_at >= cutoff and reply.get('user_id') in student_ids:
+                reply_author = reply.get('user_id')
+                if reply_at < cutoff:
+                    continue
+                if reply_author in student_ids:
                     events.append({
                         'course_id': course_id,
-                        'student_canvas_id': reply['user_id'],
+                        'student_canvas_id': reply_author,
                         'event_type': 'discussion_reply',
+                        'occurred_at': reply_at,
+                        'source_id': reply['id'],
+                    })
+                elif reply_author == instructor_id and entry.get('user_id') in student_ids:
+                    # Instructor replied to a student's entry — record on the student's row
+                    events.append({
+                        'course_id': course_id,
+                        'student_canvas_id': entry['user_id'],
+                        'event_type': 'discussion_instructor_reply',
                         'occurred_at': reply_at,
                         'source_id': reply['id'],
                     })

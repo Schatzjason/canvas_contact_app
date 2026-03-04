@@ -20,15 +20,20 @@ def _days_ago(n):
     return (datetime.now(timezone.utc) - timedelta(days=n)).isoformat()
 
 
+INSTRUCTOR_ID = 500
+
+
 def _make_client(enrollments=None, conversations=None, inbox=None,
-                 topics=None, entries_by_topic=None):
+                 topics=None, entries_by_topic=None, instructor_id=INSTRUCTOR_ID):
     """Return a mock CanvasClient that yields controlled fixture data.
 
     conversations: sent (instructor) conversations (scope='sent')
     inbox:         received conversations (scope='inbox') for student messages
+    instructor_id: Canvas user ID returned by get_current_user
     """
     mock = MagicMock()
     mock.get_enrollments.return_value = enrollments or []
+    mock.get_current_user.return_value = {'id': instructor_id}
 
     sent_convs  = conversations or []
     inbox_convs = inbox or []
@@ -339,3 +344,74 @@ def test_sync_sent_and_inbox_same_conversation_creates_two_event_types():
     assert len(events) == 2
     types = {e.event_type for e in events}
     assert types == {'conversation', 'student_message'}
+
+
+# ---------------------------------------------------------------------------
+# Instructor discussion replies
+# ---------------------------------------------------------------------------
+
+def test_sync_creates_instructor_disc_reply_event():
+    """Instructor reply to a student entry → discussion_instructor_reply on that student's row."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        topics=[{'id': 201}],
+        entries_by_topic={201: [{
+            'id': 301,
+            'user_id': STUDENT_A,
+            'created_at': _days_ago(5),
+            'recent_replies': [
+                {'id': 401, 'user_id': INSTRUCTOR_ID, 'created_at': _days_ago(2)},
+            ],
+        }]},
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    events = InteractionEvent.query.all()
+    assert len(events) == 2  # discussion_entry + discussion_instructor_reply
+    types = {e.event_type for e in events}
+    assert 'discussion_instructor_reply' in types
+    reply_event = next(e for e in events if e.event_type == 'discussion_instructor_reply')
+    assert reply_event.student_canvas_id == STUDENT_A
+    assert reply_event.source_id == 401
+
+
+def test_sync_instructor_reply_ignored_for_non_student_entry():
+    """Instructor replying to their own (or non-enrolled) post → no event."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        topics=[{'id': 201}],
+        entries_by_topic={201: [{
+            'id': 301,
+            'user_id': 999,  # non-enrolled entry author
+            'created_at': _days_ago(5),
+            'recent_replies': [
+                {'id': 401, 'user_id': INSTRUCTOR_ID, 'created_at': _days_ago(2)},
+            ],
+        }]},
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    types = {e.event_type for e in InteractionEvent.query.all()}
+    assert 'discussion_instructor_reply' not in types
+
+
+def test_sync_instructor_reply_outside_cutoff_ignored():
+    """Instructor reply older than 21 days is not recorded."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        topics=[{'id': 201}],
+        entries_by_topic={201: [{
+            'id': 301,
+            'user_id': STUDENT_A,
+            'created_at': _days_ago(25),
+            'recent_replies': [
+                {'id': 401, 'user_id': INSTRUCTOR_ID, 'created_at': _days_ago(25)},
+            ],
+        }]},
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    assert InteractionEvent.query.count() == 0
