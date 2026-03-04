@@ -24,6 +24,8 @@
     --text-secondary: #6b6760;
     --text-tertiary: #9b9893;
     --accent: #c44b1e;
+    --icon-message: #3b6fd4;
+    --icon-discussion: #7c4dba;
     --mono: 'IBM Plex Mono', monospace;
     --sans: 'IBM Plex Sans', sans-serif;
     --nav-bg: #1a1915;
@@ -32,6 +34,7 @@
   body { font-family: var(--sans); background: var(--bg); color: var(--text-primary); min-height: 100vh; }
   main { max-width: none; margin: 0; padding: 0; }
 
+  /* ── NAV ─────────────────────────────────────────────────── */
   .app-nav {
     background: var(--nav-bg);
     padding: 0 40px;
@@ -42,32 +45,136 @@
     border-bottom: 1px solid #2e2c28;
   }
   .nav-left { display: flex; align-items: center; }
-  .nav-logo { font-family: var(--mono); font-size: 13px; font-weight: 500; color: #f0ede8; letter-spacing: 0.04em; text-decoration: none; transition: color 0.15s ease; }
+  .nav-logo { font-family: var(--mono); font-size: 13px; font-weight: 500; color: #f0ede8; letter-spacing: 0.04em; text-decoration: none; transition: color 0.15s; }
   .nav-logo:hover { color: #ffffff; }
   .nav-logo span { color: var(--accent); }
   .nav-sep { font-family: var(--mono); font-size: 13px; color: #3a3835; margin: 0 10px; user-select: none; }
-  .nav-course { font-family: var(--mono); font-size: 12px; font-weight: 500; color: #9b9893; letter-spacing: 0.04em; text-decoration: none; transition: color 0.15s ease; }
+  .nav-course { font-family: var(--mono); font-size: 12px; font-weight: 500; color: #9b9893; letter-spacing: 0.04em; text-decoration: none; transition: color 0.15s; }
   .nav-course:hover { color: #f0ede8; }
   .nav-student { font-family: var(--mono); font-size: 12px; font-weight: 500; color: #f0ede8; letter-spacing: 0.04em; }
   .nav-meta { font-family: var(--mono); font-size: 11px; color: #6b6760; flex-shrink: 0; }
 
+  /* ── PAGE ────────────────────────────────────────────────── */
   .page { padding: 36px 40px; }
 
   h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 4px; }
-  .student-label {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--text-tertiary);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    margin-bottom: 6px;
-  }
+  .student-label { font-family: var(--mono); font-size: 11px; color: var(--text-tertiary); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+
   .name-row { display: flex; align-items: center; gap: 10px; }
   .staleness-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
   .staleness-dot.green  { background: #5a9e6e; }
   .staleness-dot.yellow { background: #d4a012; }
   .staleness-dot.red    { background: #e8705a; }
   .days-ago { font-family: var(--mono); font-size: 12px; color: var(--text-secondary); }
+
+  /* ── PINNED POST ─────────────────────────────────────────── */
+  .section { margin-top: 32px; max-width: 680px; }
+  .section-title { font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--text-tertiary); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px; }
+  .post-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; font-size: 13.5px; line-height: 1.65; color: var(--text-primary); white-space: pre-wrap; word-break: break-word; }
+  .post-card.empty { color: var(--text-tertiary); font-style: italic; }
+
+  /* ── TIMELINE ────────────────────────────────────────────── */
+  .timeline { margin-top: 4px; }
+
+  .tl-row { display: grid; grid-template-columns: 72px 28px 1fr; align-items: center; }
+  .tl-row.tl-empty  { height: 14px; }
+  .tl-row.tl-active { min-height: 40px; padding: 5px 0; }
+
+  .tl-date { font-family: var(--mono); font-size: 11px; color: var(--text-secondary); text-align: right; padding-right: 10px; white-space: nowrap; }
+
+  .tl-spine { display: flex; align-items: center; justify-content: center; align-self: stretch; position: relative; }
+  .tl-spine::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--border-strong); transform: translateX(-50%); }
+  .tl-row.tl-active .tl-spine::after { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--text-tertiary); position: relative; z-index: 1; }
+
+  .tl-icons { display: flex; align-items: center; gap: 5px; padding-left: 12px; cursor: pointer; }
+  .tl-row.tl-active .tl-icons:hover .icon-wrap { filter: brightness(1.08); }
+
+  /* ── ICON SYSTEM ─────────────────────────────────────────── */
+  .icon-wrap { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 5px; cursor: pointer; flex-shrink: 0; transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease; }
+  .icon-wrap svg { width: 15px; height: 15px; }
+  .icon-msg         { background: #eef3fc; color: var(--icon-message);    border: 2px solid var(--icon-message); }
+  .icon-msg.student { border-style: dashed; }
+  .icon-disc         { background: #f3eefb; color: var(--icon-discussion); border: 2px solid var(--icon-discussion); }
+  .icon-disc.student { border-style: dashed; }
+  .icon-wrap:hover { transform: scale(1.15) translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,0.16); }
+  .icon-stack { position: relative; display: inline-flex; width: 34px; height: 34px; cursor: pointer; flex-shrink: 0; }
+  .icon-stack .icon-back  { position: absolute; bottom: 0; right: 0; z-index: 1; border-style: dashed; transition: transform 0.12s ease; }
+  .icon-stack .icon-front { position: absolute; top: 0; left: 0; z-index: 2; border-style: solid; transition: transform 0.12s ease, box-shadow 0.12s ease; }
+  .icon-stack:hover .icon-back  { transform: translate(3px, 3px); }
+  .icon-stack:hover .icon-front { transform: translate(-2px, -2px); box-shadow: 0 3px 8px rgba(0,0,0,0.18); }
+
+  /* ── DRAWER ──────────────────────────────────────────────── */
+  .drawer {
+    position: fixed;
+    top: 0; right: 0; bottom: 0;
+    width: 40%;
+    min-width: 340px;
+    background: var(--surface);
+    border-left: 1px solid var(--border-strong);
+    box-shadow: -8px 0 40px rgba(0,0,0,0.10);
+    z-index: 500;
+    transform: translateX(100%);
+    transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .drawer.open { transform: translateX(0); }
+
+  .drawer-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 22px 24px 16px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .drawer-date {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
+  }
+  .drawer-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    line-height: 1;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    padding: 0 2px;
+    margin-top: -2px;
+    transition: color 0.12s;
+    flex-shrink: 0;
+  }
+  .drawer-close:hover { color: var(--text-primary); }
+
+  .drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 24px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .drawer-section-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin-bottom: 8px;
+  }
+  .drawer-section-text {
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .drawer-section-text.empty { color: var(--text-tertiary); font-style: italic; }
 {% endblock %}
 
 {% block content %}
@@ -84,5 +191,143 @@
       {%- endif %}
     </span>
   </div>
+
+  <div class="section">
+    <div class="section-title">Pinned Discussion Post</div>
+    {% if pinned_post %}
+      <div class="post-card">{{ pinned_post }}</div>
+    {% else %}
+      <div class="post-card empty">No post found for this student.</div>
+    {% endif %}
+  </div>
+
+  <div class="section">
+    <div class="section-title">Last 21 Days</div>
+    <div class="timeline">
+      {% for day in days | reverse %}
+        {%- set types = active_days.get(day) -%}
+        <div class="tl-row {% if types %}tl-active{% else %}tl-empty{% endif %}"
+             {% if types %}data-day="{{ day.isoformat() }}"{% endif %}>
+          <div class="tl-date">
+            {%- if types %}{{ day.strftime('%a') }} {{ day.month }}/{{ day.day }}{% endif -%}
+          </div>
+          <div class="tl-spine"></div>
+          <div class="tl-icons">
+            {%- if types -%}
+              {%- set has_instr_msg  = 'conversation' in types -%}
+              {%- set has_stud_msg   = 'student_message' in types -%}
+              {%- set has_stud_disc  = 'discussion_entry' in types or 'discussion_reply' in types -%}
+              {%- set has_instr_disc = 'discussion_instructor_reply' in types -%}
+              {%- set has_any_msg    = has_instr_msg or has_stud_msg -%}
+              {%- set has_any_disc   = has_stud_disc or has_instr_disc -%}
+              {%- if has_any_msg and has_any_disc -%}
+                <span class="icon-stack">
+                  <span class="icon-wrap icon-disc{% if not has_instr_disc %} student{% endif %} icon-back"><svg><use href="#ico-disc"/></svg></span>
+                  <span class="icon-wrap icon-msg{% if not has_instr_msg %} student{% endif %} icon-front"><svg><use href="#ico-msg"/></svg></span>
+                </span>
+              {%- elif has_instr_msg and has_stud_msg -%}
+                <span class="icon-stack">
+                  <span class="icon-wrap icon-msg student icon-back"><svg><use href="#ico-msg"/></svg></span>
+                  <span class="icon-wrap icon-msg icon-front"><svg><use href="#ico-msg"/></svg></span>
+                </span>
+              {%- elif has_instr_msg -%}
+                <span class="icon-wrap icon-msg" title="Instructor message"><svg><use href="#ico-msg"/></svg></span>
+              {%- elif has_stud_msg -%}
+                <span class="icon-wrap icon-msg student" title="Student message"><svg><use href="#ico-msg"/></svg></span>
+              {%- elif has_instr_disc and has_stud_disc -%}
+                <span class="icon-stack">
+                  <span class="icon-wrap icon-disc student icon-back"><svg><use href="#ico-disc"/></svg></span>
+                  <span class="icon-wrap icon-disc icon-front"><svg><use href="#ico-disc"/></svg></span>
+                </span>
+              {%- elif has_instr_disc -%}
+                <span class="icon-wrap icon-disc" title="Instructor replied to discussion"><svg><use href="#ico-disc"/></svg></span>
+              {%- elif has_stud_disc -%}
+                <span class="icon-wrap icon-disc student" title="Student discussion"><svg><use href="#ico-disc"/></svg></span>
+              {%- endif -%}
+            {%- endif -%}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
 </div>
+
+<!-- Detail drawer -->
+<aside class="drawer" id="detail-drawer" aria-hidden="true">
+  <div class="drawer-header">
+    <div class="drawer-date" id="drawer-date"></div>
+    <button class="drawer-close" id="drawer-close" aria-label="Close">&times;</button>
+  </div>
+  <div class="drawer-body" id="drawer-body"></div>
+</aside>
+
+<script>
+const DRAWER_DATA = {{ day_drawer | tojson }};
+
+(function () {
+  const drawer  = document.getElementById('detail-drawer');
+  const dateEl  = document.getElementById('drawer-date');
+  const bodyEl  = document.getElementById('drawer-body');
+  const closeBtn = document.getElementById('drawer-close');
+  let openDay = null;
+
+  function openDrawer(day) {
+    const data = DRAWER_DATA[day];
+    if (!data) return;
+
+    dateEl.textContent = data.date_label;
+    bodyEl.innerHTML = '';
+    data.sections.forEach(function(sec) {
+      const wrap = document.createElement('div');
+      const label = document.createElement('div');
+      label.className = 'drawer-section-label';
+      label.textContent = sec.label;
+      const text = document.createElement('div');
+      text.className = 'drawer-section-text' + (sec.text ? '' : ' empty');
+      text.textContent = sec.text || 'No content available.';
+      wrap.appendChild(label);
+      wrap.appendChild(text);
+      bodyEl.appendChild(wrap);
+    });
+
+    drawer.classList.add('open');
+    drawer.setAttribute('aria-hidden', 'false');
+    openDay = day;
+  }
+
+  function closeDrawer() {
+    drawer.classList.remove('open');
+    drawer.setAttribute('aria-hidden', 'true');
+    openDay = null;
+  }
+
+  // Click on icons area
+  document.addEventListener('click', function(e) {
+    // Close button
+    if (closeBtn.contains(e.target)) { closeDrawer(); return; }
+
+    // Click inside open drawer — do nothing
+    if (drawer.contains(e.target)) return;
+
+    // Click on a timeline icon
+    const row = e.target.closest('.tl-row.tl-active');
+    if (row && row.dataset.day) {
+      if (openDay === row.dataset.day) {
+        closeDrawer();
+      } else {
+        openDrawer(row.dataset.day);
+      }
+      return;
+    }
+
+    // Click outside everything — close
+    closeDrawer();
+  });
+
+  // Escape key
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeDrawer();
+  });
+})();
+</script>
 {% endblock %}

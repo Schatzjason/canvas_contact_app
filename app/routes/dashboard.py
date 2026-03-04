@@ -15,6 +15,8 @@ from app.services.sync import run_sync, sync_course
 
 bp = Blueprint('dashboard', __name__)
 
+PINNED_DISCUSSION_TOPIC_ID = 1461939
+
 
 def _strip_html(html):
     """Convert Canvas HTML message to plain text."""
@@ -326,6 +328,115 @@ def student(course_id, student_id):
     else:
         student_name = f'Student {student_id}'
 
+    today = datetime.now(timezone.utc).date()
+    days = [today - timedelta(days=i) for i in range(20, -1, -1)]
+    window_start_dt = datetime.combine(days[0], time.min, tzinfo=timezone.utc)
+
+    active_days = {}
+    event_source_ids = {}  # {(day, event_type): [source_id, ...]}
+    for event in InteractionEvent.query.filter(
+        InteractionEvent.course_id == course_id,
+        InteractionEvent.student_canvas_id == student_id,
+        InteractionEvent.occurred_at >= window_start_dt,
+    ).all():
+        day = event.occurred_at.date()
+        active_days.setdefault(day, set()).add(event.event_type)
+        event_source_ids.setdefault((day, event.event_type), []).append(event.source_id)
+
+    # ── Fetch text content from canvas cache for drawer ───────
+    disc_ids = [s for (d, et), ss in event_source_ids.items()
+                if et in ('discussion_entry', 'discussion_reply') for s in ss]
+    instr_disc_ids = [s for (d, et), ss in event_source_ids.items()
+                      if et == 'discussion_instructor_reply' for s in ss]
+    msg_ids = [s for (d, et), ss in event_source_ids.items()
+               if et in ('conversation', 'student_message') for s in ss]
+
+    disc_text_by_src = {}
+    if disc_ids:
+        rows = db.session.execute(text("""
+            SELECT (e->>'id')::bigint AS sid, e->>'message' AS msg
+            FROM canvas_cache, jsonb_array_elements(response_json::jsonb) AS e
+            WHERE (e->>'id')::bigint = ANY(:ids)
+            UNION ALL
+            SELECT (r->>'id')::bigint, r->>'message'
+            FROM canvas_cache,
+                 jsonb_array_elements(response_json::jsonb) AS e,
+                 jsonb_array_elements(CASE WHEN jsonb_typeof(e->'recent_replies')='array'
+                     THEN e->'recent_replies' ELSE '[]'::jsonb END) AS r
+            WHERE (r->>'id')::bigint = ANY(:ids)
+        """), {'ids': disc_ids}).fetchall()
+        disc_text_by_src = {r.sid: _strip_html(r.msg) for r in rows}
+
+    instr_reply_text_by_src = {}
+    if instr_disc_ids:
+        # Only search recent_replies — real Canvas replies live there;
+        # fixture source_ids point to top-level entries (student text, not reply).
+        rows = db.session.execute(text("""
+            SELECT (r->>'id')::bigint AS sid, r->>'message' AS msg
+            FROM canvas_cache,
+                 jsonb_array_elements(response_json::jsonb) AS e,
+                 jsonb_array_elements(CASE WHEN jsonb_typeof(e->'recent_replies')='array'
+                     THEN e->'recent_replies' ELSE '[]'::jsonb END) AS r
+            WHERE (r->>'id')::bigint = ANY(:ids)
+        """), {'ids': instr_disc_ids}).fetchall()
+        instr_reply_text_by_src = {r.sid: _strip_html(r.msg) for r in rows}
+
+    conv_text_by_src = {}
+    if msg_ids:
+        rows = db.session.execute(text("""
+            SELECT (e->>'id')::bigint AS sid,
+                   e->>'subject' AS subject,
+                   e->>'last_authored_message' AS authored,
+                   e->>'last_message' AS last_msg
+            FROM canvas_cache, jsonb_array_elements(response_json::jsonb) AS e
+            WHERE e->>'subject' IS NOT NULL
+              AND (e->>'id')::bigint = ANY(:ids)
+        """), {'ids': msg_ids}).fetchall()
+        for r in rows:
+            parts = [f'Subject: {r.subject}'] if r.subject else []
+            body = r.authored or r.last_msg
+            if body:
+                parts.append(body)
+            conv_text_by_src[r.sid] = '\n\n'.join(parts)
+
+    # ── Build per-day drawer payload ──────────────────────────
+    day_drawer = {}
+    for day, types in active_days.items():
+        sections = []
+
+        disc_srcs = (event_source_ids.get((day, 'discussion_entry'), []) +
+                     event_source_ids.get((day, 'discussion_reply'), []))
+        if disc_srcs:
+            texts = [disc_text_by_src[s] for s in disc_srcs if s in disc_text_by_src]
+            sections.append({'label': 'Student Discussion',
+                             'text': '\n\n---\n\n'.join(texts)})
+
+        for s in event_source_ids.get((day, 'discussion_instructor_reply'), []):
+            reply_text = instr_reply_text_by_src.get(s, '')
+            sections.append({'label': 'Instructor Discussion Reply', 'text': reply_text})
+
+        for s in event_source_ids.get((day, 'conversation'), []):
+            sections.append({'label': 'Instructor Message',
+                             'text': conv_text_by_src.get(s, '')})
+
+        for s in event_source_ids.get((day, 'student_message'), []):
+            sections.append({'label': 'Student Message',
+                             'text': conv_text_by_src.get(s, '')})
+
+        day_drawer[day.isoformat()] = {
+            'date_label': day.strftime('%A') + ', ' + day.strftime('%B') + ' ' + str(day.day),
+            'sections': sections,
+        }
+
+    pinned_post = None
+    try:
+        entries = client.get_discussion_entries(course_id, PINNED_DISCUSSION_TOPIC_ID)
+        entry = next((e for e in entries if e.get('user_id') == student_id), None)
+        if entry:
+            pinned_post = _strip_html(entry.get('message', ''))
+    except Exception as exc:
+        current_app.logger.warning('Could not load pinned discussion: %s', exc)
+
     now = datetime.now(timezone.utc)
     warn_days  = current_app.config['STALE_WARN_DAYS']
     alert_days = current_app.config['STALE_ALERT_DAYS']
@@ -355,4 +466,9 @@ def student(course_id, student_id):
         student_name=student_name,
         days_since=days_since,
         staleness=staleness,
+        pinned_post=pinned_post,
+        days=days,
+        today=today,
+        active_days=active_days,
+        day_drawer=day_drawer,
     )
