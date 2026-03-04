@@ -155,6 +155,45 @@ class CanvasClient:
             ttl=TTL_CONVERSATIONS,
         )
 
+    def stream_conversations(self, since=None):
+        """Generator that yields pages of sent conversations one at a time.
+
+        Yields (page, is_cached):
+          - is_cached=True  → single yield of the full cached list
+          - is_cached=False → one yield per HTTP page as it arrives
+
+        Writes the combined result to cache after all pages are fetched.
+        """
+        params = {'scope': 'sent'}
+        if since is not None:
+            params['start_time'] = since.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+        cache_key = self._make_cache_key('/api/v1/conversations', params)
+        cached = self._cache_read(cache_key)
+        if cached is not None:
+            yield cached, True
+            return
+
+        results = []
+        next_url = f'{self.base_url}/api/v1/conversations'
+        next_params = {'per_page': 100, **params}
+
+        while next_url:
+            resp = requests.get(
+                next_url,
+                headers=self._auth_headers(),
+                params=next_params,
+                timeout=10,
+            )
+            resp.raise_for_status()
+            page = resp.json()
+            results.extend(page)
+            yield page, False
+            next_url = self._parse_next_url(resp.headers.get('Link'))
+            next_params = {}
+
+        self._cache_write(cache_key, results, TTL_CONVERSATIONS)
+
     def get_discussion_topics(self, course_id):
         """All discussion topics for a course (cached 15 min)."""
         return self._get_all_pages(

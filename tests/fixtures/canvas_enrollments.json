@@ -1,0 +1,16 @@
+[
+  {
+    "user_id": 101,
+    "user": {
+      "name": "Alice Smith",
+      "sortable_name": "Smith, Alice"
+    }
+  },
+  {
+    "user_id": 102,
+    "user": {
+      "name": "Bob Jones",
+      "sortable_name": "Jones, Bob"
+    }
+  }
+]

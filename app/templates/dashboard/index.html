@@ -104,8 +104,8 @@
           setTimeout(function () { window.location.href = destUrl; }, 1500);
         } else if (msg.status === 'fetching') {
           text.textContent = 'Fetching ' + msg.item + '…';
-        } else if (msg.status === 'reading') {
-          text.textContent = 'Reading ' + msg.item + '…';
+        } else if (msg.status === 'fetching_page') {
+          text.textContent = text.textContent + '.';
         } else if (msg.status === 'saving') {
           text.textContent = 'Saving ' + msg.item + '…';
         }

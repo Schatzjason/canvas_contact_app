@@ -34,10 +34,13 @@ def sync_course(course_id):
     # scope=sent means messages the instructor sent; participants includes all
     # people in the thread.  We record one event per enrolled student per convo.
     yield {'status': 'fetching', 'item': 'conversations'}
-    conversations = client.get_conversations(since=cutoff)
+    conversations = []
+    for page, is_cached in client.stream_conversations(since=cutoff):
+        conversations.extend(page)
+        if not is_cached:
+            yield {'status': 'fetching_page', 'item': 'conversations'}
 
-    for i, conv in enumerate(conversations, 1):
-        yield {'status': 'reading', 'item': f'conversation {i}'}
+    for conv in conversations:
         ts_str = conv.get('last_authored_at') or conv.get('last_message_at')
         if not ts_str:
             continue
@@ -60,7 +63,6 @@ def sync_course(course_id):
         yield {'status': 'fetching', 'item': f'discussion {i} entries'}
         entries = client.get_discussion_entries(course_id, topic['id'])
 
-        yield {'status': 'reading', 'item': f'discussion {i}'}
         for entry in entries:
             entry_at = datetime.fromisoformat(entry['created_at'])
             if entry_at >= cutoff and entry.get('user_id') in student_ids:

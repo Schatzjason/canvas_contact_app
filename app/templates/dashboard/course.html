@@ -39,7 +39,9 @@
   tr.row-yellow td { background: #fff3cd; }
   tr.row-red    td { background: #f8d7da; }
 
-  .dot { color: #2c7be5; font-size: 1rem; line-height: 1; }
+  .icon-msg  { font-size: 0.8rem; line-height: 1; display: inline-block; color: #2c7be5; }
+  .icon-disc { display: inline-block; vertical-align: middle; color: #2c7be5; }
+  .icon-disc svg { width: 1.1rem; height: 1.1rem; }
 
   .last-seen { font-size: 0.75rem; color: #555; display: block; }
 
@@ -66,6 +68,8 @@
   <div class="legend-item"><div class="legend-swatch swatch-green"></div> Interacted within {{ config.STALE_WARN_DAYS }} days</div>
   <div class="legend-item"><div class="legend-swatch swatch-yellow"></div> {{ config.STALE_WARN_DAYS }}–{{ config.STALE_ALERT_DAYS }} days ago</div>
   <div class="legend-item"><div class="legend-swatch swatch-red"></div> Over {{ config.STALE_ALERT_DAYS }} days or never</div>
+  <div class="legend-item"><span class="icon-msg">✉</span> Message</div>
+  <div class="legend-item"><span class="icon-disc"><svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg></span> Discussion</div>
 </div>
 
 <div class="timeline-wrap">
@@ -92,7 +96,13 @@
             {% endif %}
           </td>
           {% for day in days %}
-            <td>{% if day in student.active_days %}<span class="dot">●</span>{% endif %}</td>
+            {% set types = student.active_days.get(day) %}
+            <td>
+              {%- if types -%}
+                {%- if 'conversation' in types %}<span class="icon-msg" title="Message">✉</span>{% endif -%}
+                {%- if 'discussion_entry' in types or 'discussion_reply' in types %}<span class="icon-disc" title="Discussion"><svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg></span>{% endif -%}
+              {%- endif -%}
+            </td>
           {% endfor %}
         </tr>
       {% endfor %}

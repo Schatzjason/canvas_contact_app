@@ -96,13 +96,15 @@ def course(course_id):
     }
 
     # Which days within the 21-day window had an interaction, per student
+    # active_days_by_student: {student_id: {date: set(event_types)}}
     active_days_by_student = {}
     for event in InteractionEvent.query.filter(
         InteractionEvent.course_id == course_id,
         InteractionEvent.occurred_at >= window_start_dt,
     ).all():
         sid = event.student_canvas_id
-        active_days_by_student.setdefault(sid, set()).add(event.occurred_at.date())
+        day = event.occurred_at.date()
+        active_days_by_student.setdefault(sid, {}).setdefault(day, set()).add(event.event_type)
 
     students = []
     for enrollment in enrollments:
@@ -128,7 +130,7 @@ def course(course_id):
             'last_date': last_date,
             'days_since': days_since,
             'staleness': staleness,
-            'active_days': active_days_by_student.get(canvas_id, set()),
+            'active_days': active_days_by_student.get(canvas_id, {}),
         })
 
     # No interaction ever → first; then ascending by last interaction date
