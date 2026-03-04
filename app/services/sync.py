@@ -1,3 +1,5 @@
+import json
+import pathlib
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -5,6 +7,37 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app import db
 from app.models.interaction_event import InteractionEvent
 from app.services.canvas_client import CanvasClient
+
+FIXTURES_DIR = pathlib.Path(__file__).parent.parent.parent / 'fixtures'
+
+
+def inject_fixture_responses(course_id):
+    """Upsert fabricated instructor replies from a JSON fixture file."""
+    fixture_path = FIXTURES_DIR / f'discussion_responses_{course_id}.json'
+    if not fixture_path.exists():
+        return 0
+    entries = json.loads(fixture_path.read_text())
+    events = [
+        {
+            'course_id': e['course_id'],
+            'student_canvas_id': e['student_canvas_id'],
+            'event_type': 'discussion_instructor_reply',
+            'occurred_at': datetime.fromisoformat(e['entry_occurred_at']),
+            'source_id': e['source_id'],
+        }
+        for e in entries
+        if e.get('response', '').strip()
+    ]
+    if not events:
+        return 0
+    stmt = pg_insert(InteractionEvent.__table__).values(events)
+    stmt = stmt.on_conflict_do_update(
+        constraint='uq_interaction_event_type_source_student',
+        set_={'occurred_at': stmt.excluded.occurred_at},
+    )
+    db.session.execute(stmt)
+    db.session.commit()
+    return len(events)
 
 
 def sync_course(course_id):
@@ -136,6 +169,8 @@ def sync_course(course_id):
         )
         db.session.execute(stmt)
         db.session.commit()
+
+    inject_fixture_responses(course_id)
 
     yield {'status': 'done', 'count': len(events)}
 

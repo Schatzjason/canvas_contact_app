@@ -238,6 +238,27 @@
   .student-ago  { font-family: var(--mono); font-size: 10px; color: var(--text-tertiary); margin-top: 2px; }
 
   tr.tier-separator td { height: 2px; padding: 0; background: var(--border-strong); }
+
+  /* ── DISCUSSION POPUP ───────────────────────────────────── */
+  #disc-popup {
+    display: none;
+    position: fixed;
+    z-index: 9999;
+    max-width: 340px;
+    max-height: 280px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    word-break: break-word;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.14);
+    pointer-events: auto;
+  }
 {% endblock %}
 
 {% block content %}
@@ -325,9 +346,10 @@
                 {%- set has_instr_disc = 'discussion_instructor_reply' in types -%}
                 {%- set has_any_msg    = has_instr_msg or has_stud_msg -%}
                 {%- set has_any_disc   = has_stud_disc or has_instr_disc -%}
+                {%- set disc_msg = disc_messages.get((student.canvas_id, day), '') -%}
                 {%- if has_any_msg and has_any_disc -%}
                   {# message + discussion: stack, appropriate variant for each #}
-                  <span class="icon-stack">
+                  <span class="icon-stack"{% if disc_msg %} data-disc-msg="{{ disc_msg | e }}"{% endif %}>
                     <span class="icon-wrap icon-disc{% if not has_instr_disc %} student{% endif %} icon-back"><svg><use href="#ico-disc"/></svg></span>
                     <span class="icon-wrap icon-msg{% if not has_instr_msg %} student{% endif %} icon-front"><svg><use href="#ico-msg"/></svg></span>
                   </span>
@@ -341,14 +363,14 @@
                 {%- elif has_stud_msg -%}
                   <span class="icon-wrap icon-msg student" title="Student message"><svg><use href="#ico-msg"/></svg></span>
                 {%- elif has_instr_disc and has_stud_disc -%}
-                  <span class="icon-stack">
+                  <span class="icon-stack"{% if disc_msg %} data-disc-msg="{{ disc_msg | e }}"{% endif %}>
                     <span class="icon-wrap icon-disc student icon-back"><svg><use href="#ico-disc"/></svg></span>
                     <span class="icon-wrap icon-disc icon-front"><svg><use href="#ico-disc"/></svg></span>
                   </span>
                 {%- elif has_instr_disc -%}
-                  <span class="icon-wrap icon-disc" title="Instructor replied to discussion"><svg><use href="#ico-disc"/></svg></span>
+                  <span class="icon-wrap icon-disc" title="Instructor replied to discussion"{% if disc_msg %} data-disc-msg="{{ disc_msg | e }}"{% endif %}><svg><use href="#ico-disc"/></svg></span>
                 {%- elif has_stud_disc -%}
-                  <span class="icon-wrap icon-disc student" title="Student discussion"><svg><use href="#ico-disc"/></svg></span>
+                  <span class="icon-wrap icon-disc student" title="Student discussion"{% if disc_msg %} data-disc-msg="{{ disc_msg | e }}"{% endif %}><svg><use href="#ico-disc"/></svg></span>
                 {%- endif -%}
               {%- endif -%}
             </td>
@@ -363,4 +385,48 @@
   <p style="color:var(--text-secondary); margin-top:1rem; font-size:0.9rem;">No enrolled students found.</p>
 {% endif %}
 </div>{# .page #}
+
+<div id="disc-popup"></div>
+
+<script>
+(function () {
+  const popup = document.getElementById('disc-popup');
+  let hideTimer;
+
+  function show(el, e) {
+    clearTimeout(hideTimer);
+    popup.textContent = el.dataset.discMsg;
+    popup.style.display = 'block';
+    position(e);
+  }
+
+  function hide() {
+    hideTimer = setTimeout(() => { popup.style.display = 'none'; }, 80);
+  }
+
+  function position(e) {
+    const gap = 14;
+    let x = e.clientX + gap;
+    let y = e.clientY + gap;
+    if (x + popup.offsetWidth  > window.innerWidth  - gap) x = e.clientX - popup.offsetWidth  - gap;
+    if (y + popup.offsetHeight > window.innerHeight - gap) y = e.clientY - popup.offsetHeight - gap;
+    popup.style.left = x + 'px';
+    popup.style.top  = y + 'px';
+  }
+
+  document.addEventListener('mouseover', (e) => {
+    const el = e.target.closest('[data-disc-msg]');
+    if (el) show(el, e);
+  });
+  document.addEventListener('mouseout', (e) => {
+    if (e.target.closest('[data-disc-msg]')) hide();
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (popup.style.display === 'block' && e.target.closest('[data-disc-msg]')) position(e);
+  });
+
+  popup.addEventListener('mouseenter', () => clearTimeout(hideTimer));
+  popup.addEventListener('mouseleave', hide);
+})();
+</script>
 {% endblock %}

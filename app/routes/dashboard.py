@@ -1,8 +1,9 @@
 import json
+import re
 from datetime import date, datetime, time, timedelta, timezone
 
 from flask import Blueprint, Response, current_app, flash, render_template, stream_with_context
-from sqlalchemy import func
+from sqlalchemy import func, text
 
 from flask import redirect, url_for
 
@@ -13,6 +14,29 @@ from app.services.canvas_client import CanvasClient
 from app.services.sync import run_sync, sync_course
 
 bp = Blueprint('dashboard', __name__)
+
+
+def _strip_html(html):
+    """Convert Canvas HTML message to plain text."""
+    if not html:
+        return ''
+    html = re.sub(r'<(script|style)[^>]*>.*?</(script|style)>', '', html, flags=re.DOTALL | re.IGNORECASE)
+    html = re.sub(r'<link[^>]*/?>',  '', html, flags=re.IGNORECASE)
+    html = re.sub(r'<img[^>]*/?>',   '[image]', html, flags=re.IGNORECASE)
+    html = re.sub(r'<br\s*/?>',      '\n', html, flags=re.IGNORECASE)
+    html = re.sub(r'</(p|div|li|h[1-6])>', '\n', html, flags=re.IGNORECASE)
+    html = re.sub(r'<[^>]+>', '', html)
+    for ent, ch in [('&nbsp;', ' '), ('&amp;', '&'), ('&lt;', '<'), ('&gt;', '>'), ('&quot;', '"'), ('&#39;', "'")]:
+        html = html.replace(ent, ch)
+    lines = [l.rstrip() for l in html.splitlines()]
+    out, prev_blank = [], False
+    for line in lines:
+        blank = line == ''
+        if blank and prev_blank:
+            continue
+        out.append(line)
+        prev_blank = blank
+    return '\n'.join(out).strip()
 
 
 def _time_badge(last_at, now, warn_days):
@@ -170,6 +194,7 @@ def course(course_id):
     # Which days within the 21-day window had an interaction, per student
     # active_days_by_student: {student_id: {date: set(event_types)}}
     active_days_by_student = {}
+    disc_source_ids = {}  # {(student_id, date): [source_id, ...]}
     for event in InteractionEvent.query.filter(
         InteractionEvent.course_id == course_id,
         InteractionEvent.occurred_at >= window_start_dt,
@@ -177,6 +202,33 @@ def course(course_id):
         sid = event.student_canvas_id
         day = event.occurred_at.date()
         active_days_by_student.setdefault(sid, {}).setdefault(day, set()).add(event.event_type)
+        if event.event_type in ('discussion_entry', 'discussion_reply'):
+            disc_source_ids.setdefault((sid, day), []).append(event.source_id)
+
+    # Fetch discussion message text from the canvas cache
+    disc_messages = {}
+    all_disc_ids = [src for ids in disc_source_ids.values() for src in ids]
+    if all_disc_ids:
+        rows = db.session.execute(text("""
+            SELECT (e->>'id')::bigint AS source_id, e->>'message' AS message
+            FROM canvas_cache,
+                 jsonb_array_elements(response_json::jsonb) AS e
+            WHERE (e->>'id')::bigint = ANY(:ids)
+            UNION ALL
+            SELECT (r->>'id')::bigint AS source_id, r->>'message' AS message
+            FROM canvas_cache,
+                 jsonb_array_elements(response_json::jsonb) AS e,
+                 jsonb_array_elements(
+                     CASE WHEN jsonb_typeof(e->'recent_replies') = 'array'
+                     THEN e->'recent_replies' ELSE '[]'::jsonb END
+                 ) AS r
+            WHERE (r->>'id')::bigint = ANY(:ids)
+        """), {'ids': all_disc_ids}).fetchall()
+        msg_by_source = {row.source_id: _strip_html(row.message) for row in rows}
+        for (sid, day), source_ids in disc_source_ids.items():
+            texts = [msg_by_source[s] for s in source_ids if s in msg_by_source]
+            if texts:
+                disc_messages[(sid, day)] = '\n\n---\n\n'.join(texts)
 
     students = []
     for enrollment in enrollments:
@@ -213,4 +265,5 @@ def course(course_id):
         students=students,
         days=days,
         today=today,
+        disc_messages=disc_messages,
     )
