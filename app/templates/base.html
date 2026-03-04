@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Canvas Tracker{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, -apple-system, sans-serif; font-size: 15px; color: #1a1a1a; background: #f5f5f5; }
@@ -30,6 +32,17 @@
   </style>
 </head>
 <body>
+
+<svg style="display:none">
+  <symbol id="ico-msg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2 3h12v8H9l-3 2v-2H2z"/>
+  </symbol>
+  <symbol id="ico-disc" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="8" cy="6" r="3.5"/>
+    <path d="M2 14c0-2.5 2.7-4 6-4s6 1.5 6 4"/>
+  </symbol>
+</svg>
+
   <header>
     <a class="brand" href="{{ url_for('dashboard.index') }}">Canvas Tracker</a>
   </header>

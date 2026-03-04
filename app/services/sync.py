@@ -20,7 +20,11 @@ def sync_course(course_id):
     """
     client = CanvasClient()
     events = []
-    cutoff = datetime.now(timezone.utc) - timedelta(days=21)
+    # Round to midnight so the cache key is stable throughout the day.
+    # A per-second timestamp would produce a unique key on every sync call,
+    # defeating the cache entirely.
+    today = datetime.now(timezone.utc).date()
+    cutoff = datetime(today.year, today.month, today.day, tzinfo=timezone.utc) - timedelta(days=21)
 
     yield {'status': 'fetching', 'item': 'enrollments'}
     enrollments = client.get_enrollments(course_id)

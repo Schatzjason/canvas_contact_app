@@ -2,105 +2,282 @@
 {% block title %}{{ course.name }} — Canvas Tracker{% endblock %}
 
 {% block extra_styles %}
-  h1 { font-size: 1.3rem; margin-bottom: 0.25rem; }
-  .course-code { color: #777; font-size: 0.85rem; margin-bottom: 1rem; }
-  .btn-flush {
-    font-size: 0.75rem; color: #999; background: none; border: 1px solid #ddd;
-    border-radius: 4px; padding: 0.2rem 0.6rem; cursor: pointer; margin-bottom: 1.25rem;
+  :root {
+    --bg: #f7f7f5;
+    --surface: #ffffff;
+    --border: #e4e2dc;
+    --border-strong: #c8c4bb;
+    --text-primary: #1a1915;
+    --text-secondary: #6b6760;
+    --text-tertiary: #9b9893;
+    --text-today: #c44b1e;
+    --tier-hot-bg: #fef2f0;
+    --tier-hot-dot: #e8705a;
+    --tier-warm-bg: #fefbf0;
+    --tier-warm-dot: #d4a012;
+    --tier-ok-bg: #f2f8f4;
+    --tier-ok-dot: #5a9e6e;
+    --icon-message: #3b6fd4;
+    --icon-discussion: #7c4dba;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
   }
-  .btn-flush:hover { color: #c0392b; border-color: #c0392b; }
 
-  .timeline-wrap { overflow-x: auto; }
+  body { font-family: var(--sans); }
 
-  table.timeline {
-    border-collapse: collapse;
-    width: 100%;
-    table-layout: fixed;
-    font-size: 0.85rem;
+  .page-header { margin-bottom: 24px; }
+
+  .course-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-tertiary);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
   }
-  table.timeline th,
-  table.timeline td {
-    padding: 0.35rem 0.25rem;
+
+  h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 14px; }
+
+  .toolbar { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
+
+  .flush-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    padding: 5px 11px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+  }
+  .flush-btn:hover { background: var(--border); color: var(--text-primary); }
+  .flush-btn svg { width: 12px; height: 12px; }
+
+  .legend { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .divider { width: 1px; height: 14px; background: var(--border-strong); flex-shrink: 0; }
+
+  /* ── ICON SYSTEM ─────────────────────────────────────────── */
+
+  .icon-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 5px;
+    cursor: default;
+    flex-shrink: 0;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+  }
+  .icon-wrap svg { width: 15px; height: 15px; }
+
+  /* Message: instructor = solid, student = dashed */
+  .icon-msg         { background: #eef3fc; color: var(--icon-message);    border: 2px solid var(--icon-message); }
+  .icon-msg.student { border-style: dashed; }
+
+  /* Discussion: instructor = solid, student = dashed */
+  .icon-disc         { background: #f3eefb; color: var(--icon-discussion); border: 2px solid var(--icon-discussion); }
+  .icon-disc.student { border-style: dashed; }
+
+  .icon-wrap:hover {
+    transform: scale(1.15) translateY(-1px);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.16);
+    filter: brightness(1.06);
+  }
+
+  /* ── STACKED "BOTH" ICON ─────────────────────────────────── */
+  .icon-stack {
+    position: relative;
+    display: inline-flex;
+    width: 34px;
+    height: 34px;
+    cursor: default;
+    flex-shrink: 0;
+  }
+  .icon-stack .icon-back {
+    position: absolute;
+    bottom: 0; right: 0;
+    z-index: 1;
+    border-style: dashed;
+    transition: transform 0.12s ease;
+  }
+  .icon-stack .icon-front {
+    position: absolute;
+    top: 0; left: 0;
+    z-index: 2;
+    border-style: solid;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+  .icon-stack:hover .icon-back  { transform: translate(3px, 3px); }
+  .icon-stack:hover .icon-front { transform: translate(-2px, -2px); box-shadow: 0 3px 8px rgba(0,0,0,0.18); }
+
+  /* ── TABLE ───────────────────────────────────────────────── */
+  .grid-wrapper {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow-x: auto;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03);
+  }
+
+  table.timeline { border-collapse: collapse; width: 100%; }
+
+  table.timeline thead th {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    letter-spacing: 0.04em;
     text-align: center;
-    border: 1px solid #ddd;
-    white-space: nowrap;
-    overflow: hidden;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    min-width: 42px;
   }
-  table.timeline th.name-col,
-  table.timeline td.name-col {
+  table.timeline thead th.col-student {
     text-align: left;
-    width: 180px;
-    padding-left: 0.6rem;
+    padding-left: 18px;
+    min-width: 200px;
+    letter-spacing: 0.06em;
   }
-  table.timeline th.day-col { width: 38px; font-weight: normal; color: #555; }
-  table.timeline th.today-col { font-weight: 700; color: #c0392b; }
+  table.timeline thead th.col-today {
+    color: var(--text-today);
+    font-weight: 600;
+    position: relative;
+  }
+  table.timeline thead th.col-today::after {
+    content: '';
+    position: absolute;
+    bottom: 3px; left: 50%;
+    transform: translateX(-50%);
+    width: 3px; height: 3px;
+    border-radius: 50%;
+    background: var(--text-today);
+  }
 
-  tr.row-green  td { background: #d4edda; }
-  tr.row-yellow td { background: #fff3cd; }
-  tr.row-red    td { background: #f8d7da; }
+  table.timeline tbody tr { border-bottom: 1px solid var(--border); transition: filter 0.1s ease; }
+  table.timeline tbody tr:last-child { border-bottom: none; }
+  table.timeline tbody tr:hover { filter: brightness(0.97); }
 
-  .icon-msg  { font-size: 0.8rem; line-height: 1; display: inline-block; color: #2c7be5; }
-  .icon-disc { display: inline-block; vertical-align: middle; color: #2c7be5; }
-  .icon-disc svg { width: 1.1rem; height: 1.1rem; }
+  tr.tier-hot  { background: var(--tier-hot-bg); }
+  tr.tier-warm { background: var(--tier-warm-bg); }
+  tr.tier-ok   { background: var(--tier-ok-bg); }
 
-  .last-seen { font-size: 0.75rem; color: #555; display: block; }
+  table.timeline td {
+    padding: 0;
+    text-align: center;
+    vertical-align: middle;
+    height: 48px;
+  }
 
-  a.student-link { text-decoration: none; color: inherit; font-weight: 600; }
-  a.student-link:hover { text-decoration: underline; }
+  table.timeline td.col-student {
+    padding: 10px 16px 10px 18px;
+    text-align: left;
+    border-right: 1px solid var(--border);
+    position: relative;
+  }
+  table.timeline td.col-student::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 8px; bottom: 8px;
+    width: 3px;
+    border-radius: 0 2px 2px 0;
+  }
+  tr.tier-hot  td.col-student::before { background: var(--tier-hot-dot); }
+  tr.tier-warm td.col-student::before { background: var(--tier-warm-dot); }
+  tr.tier-ok   td.col-student::before { background: var(--tier-ok-dot); }
 
-  .legend { display: flex; gap: 1.25rem; margin-bottom: 1rem; font-size: 0.8rem; align-items: center; }
-  .legend-item { display: flex; align-items: center; gap: 0.35rem; }
-  .legend-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #ccc; }
-  .swatch-green  { background: #d4edda; }
-  .swatch-yellow { background: #fff3cd; }
-  .swatch-red    { background: #f8d7da; }
+  table.timeline td.col-today { position: relative; }
+  table.timeline td.col-today::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: rgba(196,75,30,0.04);
+    pointer-events: none;
+  }
+
+  .student-name { font-size: 13.5px; font-weight: 500; line-height: 1.2; white-space: nowrap; }
+  .student-ago  { font-family: var(--mono); font-size: 10px; color: var(--text-tertiary); margin-top: 2px; }
+
+  tr.tier-separator td { height: 2px; padding: 0; background: var(--border-strong); }
 {% endblock %}
 
 {% block content %}
-<h1>{{ course.name }}</h1>
-<div class="course-code">{{ course.course_code }}</div>
-
-<form method="post" action="{{ url_for('dashboard.flush_cache', course_id=course.id) }}">
-  <button class="btn-flush" type="submit">↺ flush cache</button>
-</form>
-
-<div class="legend">
-  <div class="legend-item"><div class="legend-swatch swatch-green"></div> Interacted within {{ config.STALE_WARN_DAYS }} days</div>
-  <div class="legend-item"><div class="legend-swatch swatch-yellow"></div> {{ config.STALE_WARN_DAYS }}–{{ config.STALE_ALERT_DAYS }} days ago</div>
-  <div class="legend-item"><div class="legend-swatch swatch-red"></div> Over {{ config.STALE_ALERT_DAYS }} days or never</div>
-  <div class="legend-item"><span class="icon-msg">✉</span> Message</div>
-  <div class="legend-item"><span class="icon-disc"><svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg></span> Discussion</div>
+<div class="page-header">
+  <div class="course-label">{{ course.course_code }}</div>
+  <h1>{{ course.name }}</h1>
+  <div class="toolbar">
+    <form method="post" action="{{ url_for('dashboard.flush_cache', course_id=course.id) }}" style="margin:0">
+      <button class="flush-btn" type="submit">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5"/><path d="M13.5 2.5v3h-3"/>
+        </svg>
+        Refetch Data
+      </button>
+    </form>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:var(--tier-ok-dot)"></div>Within {{ config.STALE_WARN_DAYS }} days</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--tier-warm-dot)"></div>{{ config.STALE_WARN_DAYS }}–{{ config.STALE_ALERT_DAYS }} days ago</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--tier-hot-dot)"></div>Over {{ config.STALE_ALERT_DAYS }} days or never</div>
+      <div class="divider"></div>
+      <div class="legend-item">
+        <span class="icon-wrap icon-msg"><svg><use href="#ico-msg"/></svg></span>
+        Instructor msg
+      </div>
+      <div class="legend-item">
+        <span class="icon-wrap icon-disc student"><svg><use href="#ico-disc"/></svg></span>
+        Student discussion
+      </div>
+    </div>
+  </div>
 </div>
 
-<div class="timeline-wrap">
+<div class="grid-wrapper">
   <table class="timeline">
     <thead>
       <tr>
-        <th class="name-col">Student</th>
+        <th class="col-student">Student</th>
         {% for day in days %}
-          <th class="{% if day == today %}today-col{% else %}day-col{% endif %}">
-            {{ day.month }}/{{ day.day }}
-          </th>
+          <th{% if day == today %} class="col-today"{% endif %}>{{ day.month }}/{{ day.day }}</th>
         {% endfor %}
       </tr>
     </thead>
     <tbody>
+      {% set _tier = {'green': 'tier-ok', 'yellow': 'tier-warm', 'red': 'tier-hot'} %}
+      {% set ns = namespace(prev=None) %}
       {% for student in students %}
-        <tr class="row-{{ student.staleness }}">
-          <td class="name-col">
-            <a class="student-link" href="#">{{ student.name }}</a>
-            {% if student.last_date %}
-              <span class="last-seen">{{ student.days_since }}d ago</span>
-            {% else %}
-              <span class="last-seen">no contact</span>
-            {% endif %}
+        {% if ns.prev is not none and ns.prev != student.staleness %}
+          <tr class="tier-separator"><td colspan="{{ days|length + 1 }}"></td></tr>
+        {% endif %}
+        {% set ns.prev = student.staleness %}
+        <tr class="{{ _tier[student.staleness] }}">
+          <td class="col-student">
+            <div class="student-name">{{ student.name }}</div>
+            <div class="student-ago">
+              {%- if student.last_date %}{{ student.days_since }}d ago{% else %}no contact{% endif -%}
+            </div>
           </td>
           {% for day in days %}
             {% set types = student.active_days.get(day) %}
-            <td>
+            <td{% if day == today %} class="col-today"{% endif %}>
               {%- if types -%}
-                {%- if 'conversation' in types %}<span class="icon-msg" title="Message">✉</span>{% endif -%}
-                {%- if 'discussion_entry' in types or 'discussion_reply' in types %}<span class="icon-disc" title="Discussion"><svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg></span>{% endif -%}
+                {%- set has_msg  = 'conversation' in types -%}
+                {%- set has_disc = 'discussion_entry' in types or 'discussion_reply' in types -%}
+                {%- if has_msg and has_disc -%}
+                  <span class="icon-stack" title="Instructor message + student discussion">
+                    <span class="icon-wrap icon-disc student icon-back"><svg><use href="#ico-disc"/></svg></span>
+                    <span class="icon-wrap icon-msg icon-front"><svg><use href="#ico-msg"/></svg></span>
+                  </span>
+                {%- elif has_msg -%}
+                  <span class="icon-wrap icon-msg" title="Instructor message"><svg><use href="#ico-msg"/></svg></span>
+                {%- elif has_disc -%}
+                  <span class="icon-wrap icon-disc student" title="Student discussion"><svg><use href="#ico-disc"/></svg></span>
+                {%- endif -%}
               {%- endif -%}
             </td>
           {% endfor %}
@@ -111,6 +288,6 @@
 </div>
 
 {% if not students %}
-  <p style="color:#777; margin-top:1rem;">No enrolled students found.</p>
+  <p style="color:var(--text-secondary); margin-top:1rem; font-size:0.9rem;">No enrolled students found.</p>
 {% endif %}
 {% endblock %}

@@ -99,7 +99,7 @@ def test_staleness_green(client):
     with patch('app.routes.dashboard.run_sync', return_value=0), \
          patch('app.routes.dashboard.CanvasClient', return_value=_mock_client()):
         response = client.get(f'/course/{COURSE_ID}')
-    assert b'row-green' in response.data
+    assert b'tier-ok' in response.data
 
 
 def test_staleness_yellow(client):
@@ -107,7 +107,7 @@ def test_staleness_yellow(client):
     with patch('app.routes.dashboard.run_sync', return_value=0), \
          patch('app.routes.dashboard.CanvasClient', return_value=_mock_client()):
         response = client.get(f'/course/{COURSE_ID}')
-    assert b'row-yellow' in response.data
+    assert b'tier-warm' in response.data
 
 
 def test_staleness_red_over_threshold(client):
@@ -115,7 +115,7 @@ def test_staleness_red_over_threshold(client):
     with patch('app.routes.dashboard.run_sync', return_value=0), \
          patch('app.routes.dashboard.CanvasClient', return_value=_mock_client()):
         response = client.get(f'/course/{COURSE_ID}')
-    assert b'row-red' in response.data
+    assert b'tier-hot' in response.data
 
 
 def test_staleness_never_contacted_is_red(client):
@@ -123,7 +123,7 @@ def test_staleness_never_contacted_is_red(client):
     with patch('app.routes.dashboard.run_sync', return_value=0), \
          patch('app.routes.dashboard.CanvasClient', return_value=_mock_client()):
         response = client.get(f'/course/{COURSE_ID}')
-    assert b'row-red' in response.data
+    assert b'tier-hot' in response.data
     assert b'no contact' in response.data
 
 
@@ -133,7 +133,7 @@ def test_staleness_boundary_exactly_at_warn(client):
     with patch('app.routes.dashboard.run_sync', return_value=0), \
          patch('app.routes.dashboard.CanvasClient', return_value=_mock_client()):
         response = client.get(f'/course/{COURSE_ID}')
-    assert b'row-green' in response.data
+    assert b'tier-ok' in response.data
 
 
 def test_staleness_one_day_over_warn(client):
@@ -142,7 +142,7 @@ def test_staleness_one_day_over_warn(client):
     with patch('app.routes.dashboard.run_sync', return_value=0), \
          patch('app.routes.dashboard.CanvasClient', return_value=_mock_client()):
         response = client.get(f'/course/{COURSE_ID}')
-    assert b'row-yellow' in response.data
+    assert b'tier-warm' in response.data
 
 
 def test_staleness_boundary_exactly_at_alert(client):
@@ -151,7 +151,7 @@ def test_staleness_boundary_exactly_at_alert(client):
     with patch('app.routes.dashboard.run_sync', return_value=0), \
          patch('app.routes.dashboard.CanvasClient', return_value=_mock_client()):
         response = client.get(f'/course/{COURSE_ID}')
-    assert b'row-yellow' in response.data
+    assert b'tier-warm' in response.data
 
 
 def test_staleness_one_day_over_alert(client):
@@ -160,7 +160,7 @@ def test_staleness_one_day_over_alert(client):
     with patch('app.routes.dashboard.run_sync', return_value=0), \
          patch('app.routes.dashboard.CanvasClient', return_value=_mock_client()):
         response = client.get(f'/course/{COURSE_ID}')
-    assert b'row-red' in response.data
+    assert b'tier-hot' in response.data
 
 
 # ---------------------------------------------------------------------------
