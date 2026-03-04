@@ -512,7 +512,7 @@ def compose(course_id, student_id):
         return redirect(url_for('dashboard.student', course_id=course_id, student_id=student_id))
 
     first_name = student_name.split()[0] if student_name else ''
-    default_subject = 'Check in'
+    default_subject = 'Checking in'
     default_body    = f'Hi {first_name}, ' if first_name else ''
 
     return render_template('dashboard/compose.html',
