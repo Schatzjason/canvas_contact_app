@@ -510,7 +510,6 @@ def compose(course_id, student_id):
         print(f'{"="*60}\n')
 
         # Invalidate conversation cache so the next sync picks up the sent message
-        from app.services.canvas_client import CanvasClient
         for scope in ('sent', 'inbox'):
             key = CanvasClient._make_cache_key('/api/v1/conversations', {'scope': scope})
             CanvasCache.query.filter_by(cache_key=key).delete()
@@ -523,10 +522,21 @@ def compose(course_id, student_id):
     default_subject = 'Checking in'
     default_body    = f'Hi {first_name}, ' if first_name else ''
 
+    last_at = db.session.query(
+        func.max(InteractionEvent.occurred_at)
+    ).filter(
+        InteractionEvent.course_id == course_id,
+        InteractionEvent.student_canvas_id == student_id,
+    ).scalar()
+    now = datetime.now(timezone.utc)
+    days_since = (now - last_at).days if last_at else None
+
     return render_template('dashboard/compose.html',
         course=course_obj,
         student_id=student_id,
         student_name=student_name,
+        first_name=first_name,
+        days_since=days_since,
         default_subject=default_subject,
         default_body=default_body,
     )

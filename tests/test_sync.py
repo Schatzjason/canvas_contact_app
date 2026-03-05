@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 from app import db
+from app.models.canvas_cache import CanvasCache
 from app.models.interaction_event import InteractionEvent
 from app.services.sync import sync_course
 
@@ -415,3 +416,69 @@ def test_sync_instructor_reply_outside_cutoff_ignored():
         _run()
 
     assert InteractionEvent.query.count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Sync markers (incremental fetch)
+# ---------------------------------------------------------------------------
+
+def test_sync_marker_written_after_live_fetch():
+    """A live conversation fetch should write a sync_marker row to canvas_cache."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        conversations=[{'id': 1001, 'last_authored_at': _days_ago(2), 'participants': [{'id': STUDENT_A}]}],
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    marker = CanvasCache.query.filter_by(
+        cache_key=f'sync_marker:conv_sent:{COURSE_ID}'
+    ).first()
+    assert marker is not None
+
+
+def test_sync_uses_marker_as_since():
+    """When a sync marker exists, stream_conversations receives it as `since`
+    rather than the 21-day fallback cutoff."""
+    marker_time = datetime.now(timezone.utc) - timedelta(hours=6)
+    db.session.add(CanvasCache(
+        cache_key=f'sync_marker:conv_sent:{COURSE_ID}',
+        response_json=[],
+        fetched_at=marker_time,
+        ttl_seconds=10 * 365 * 24 * 3600,
+    ))
+    db.session.commit()
+
+    mock = MagicMock()
+    mock.get_enrollments.return_value = [{'user_id': STUDENT_A}]
+    mock.get_current_user.return_value = {'id': INSTRUCTOR_ID}
+    mock.stream_conversations.side_effect = lambda since=None, scope='sent': iter([])
+    mock.get_discussion_topics.return_value = []
+
+    with patch('app.services.sync.CanvasClient', return_value=mock):
+        _run()
+
+    sent_call = mock.stream_conversations.call_args_list[0]
+    since_used = sent_call.kwargs['since']
+    # Marker was 6 hours ago; 21-day cutoff would be ~21 days ago.
+    # Verify the marker (not the cutoff) was used.
+    assert (datetime.now(timezone.utc) - since_used).total_seconds() < 24 * 3600
+
+
+def test_sync_falls_back_to_cutoff_when_no_marker():
+    """Without a sync marker, stream_conversations receives the 21-day cutoff."""
+    mock = MagicMock()
+    mock.get_enrollments.return_value = [{'user_id': STUDENT_A}]
+    mock.get_current_user.return_value = {'id': INSTRUCTOR_ID}
+    mock.stream_conversations.side_effect = lambda since=None, scope='sent': iter([])
+    mock.get_discussion_topics.return_value = []
+
+    with patch('app.services.sync.CanvasClient', return_value=mock):
+        _run()
+
+    sent_call = mock.stream_conversations.call_args_list[0]
+    since_used = sent_call.kwargs['since']
+    # Cutoff is midnight(today) - 21 days, so age is between 21 and 22 days
+    # depending on the time of day the test runs.
+    age_days = (datetime.now(timezone.utc) - since_used).total_seconds() / 86400
+    assert 21.0 <= age_days < 22.0

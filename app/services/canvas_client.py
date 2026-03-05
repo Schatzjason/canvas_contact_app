@@ -10,8 +10,8 @@ from app import db
 from app.models.canvas_cache import CanvasCache
 
 # Cache TTLs (seconds)
-TTL_CONVERSATIONS = 2 * 60
-TTL_DISCUSSION_ENTRIES = 5 * 60
+TTL_CONVERSATIONS = 30 * 60
+TTL_DISCUSSION_ENTRIES = 30 * 60
 TTL_ENROLLMENTS = 24 * 60 * 60
 
 

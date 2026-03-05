@@ -203,6 +203,39 @@ def test_sort_order_older_contact_before_newer(client):
 
 
 # ---------------------------------------------------------------------------
+# Student detail page
+# ---------------------------------------------------------------------------
+
+def _mock_client_with_name(name='Alice Smith'):
+    mock = _mock_client(enrollments=[
+        {'user_id': STUDENT_A, 'user': {'name': name, 'sortable_name': name}},
+    ])
+    mock.get_discussion_entries.return_value = []
+    return mock
+
+
+def test_student_page_200(client):
+    with patch('app.routes.dashboard.CanvasClient', return_value=_mock_client_with_name()):
+        response = client.get(f'/course/{COURSE_ID}/student/{STUDENT_A}')
+    assert response.status_code == 200
+
+
+def test_student_page_shows_name(client):
+    with patch('app.routes.dashboard.CanvasClient', return_value=_mock_client_with_name('Alice Smith')):
+        response = client.get(f'/course/{COURSE_ID}/student/{STUDENT_A}')
+    assert b'Alice Smith' in response.data
+
+
+def test_student_page_unknown_student_still_200(client):
+    """Requesting a student_id not in the enrollment list should not crash."""
+    mock = _mock_client()
+    mock.get_discussion_entries.return_value = []
+    with patch('app.routes.dashboard.CanvasClient', return_value=mock):
+        response = client.get(f'/course/{COURSE_ID}/student/99999')
+    assert response.status_code == 200
+
+
+# ---------------------------------------------------------------------------
 # flush-cache
 # ---------------------------------------------------------------------------
 

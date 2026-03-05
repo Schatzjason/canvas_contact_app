@@ -165,6 +165,29 @@ def test_get_all_pages_single_page():
     assert result == [{'id': 1}, {'id': 2}]
 
 
+def test_stream_conversations_cache_hit_ignores_since():
+    """stream_conversations uses a scope-only cache key; passing a different
+    `since` date must still hit the same cache entry, not trigger a new fetch."""
+    cache_key = CanvasClient._make_cache_key('/api/v1/conversations', {'scope': 'sent'})
+    db.session.add(CanvasCache(
+        cache_key=cache_key,
+        response_json=[{'id': 42}],
+        fetched_at=datetime.now(timezone.utc),
+        ttl_seconds=3600,
+    ))
+    db.session.commit()
+
+    with patch('requests.get') as mock_get:
+        client = CanvasClient()
+        results = list(client.stream_conversations(
+            since=datetime.now(timezone.utc) - timedelta(days=3),
+            scope='sent',
+        ))
+
+    mock_get.assert_not_called()
+    assert results == [([{'id': 42}], True)]
+
+
 def test_get_all_pages_caches_combined_result():
     resp1 = _mock_response(
         [{'id': 1}],
