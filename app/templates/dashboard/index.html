@@ -156,24 +156,87 @@
   }
   .card:hover .card-arrow { color: var(--accent); transform: translateX(3px); }
 
-  #progress-area {
+  /* ── Terminal progress panel ──────────────────────────────────── */
+  #progress-panel {
     margin-top: 16px;
-    padding: 10px 14px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
+    background: #111;
+    border: 1px solid #222;
+    border-radius: 8px;
+    font-family: var(--mono);
+    overflow: hidden;
+  }
+  #progress-panel[hidden] { display: none; }
+
+  .tp-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 9px 14px;
+    border-bottom: 1px solid #1a1917;
+  }
+  .tp-h-name    { color: #c8c4bb; font-size: 12px; font-weight: 500; letter-spacing: 0.02em; }
+  .tp-h-elapsed { color: #333; font-size: 11px; }
+
+  .tp-body { padding: 5px 0; }
+  .tp-phase {
+    display: grid;
+    grid-template-columns: 8px 102px 1fr;
+    align-items: center;
+    column-gap: 10px;
+    padding: 4px 14px;
+    font-size: 11px;
+  }
+  .tp-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+  .tp-idle    .tp-dot { background: #282622; }
+  .tp-idle    .tp-ph-label { color: #333; }
+  .tp-idle    .tp-ph-detail { color: #333; }
+
+  .tp-loading .tp-dot { background: #d4a012; animation: tp-blink 0.9s ease-in-out infinite; }
+  .tp-loading .tp-ph-label  { color: #d4a012; }
+  .tp-loading .tp-ph-detail { color: #7a6830; }
+
+  .tp-cached  .tp-dot { background: #5a9e6e; }
+  .tp-cached  .tp-ph-label  { color: #5a9e6e; }
+  .tp-cached  .tp-ph-detail { color: #3e6b4d; }
+
+  .tp-done    .tp-dot { background: #5a9e6e; }
+  .tp-done    .tp-ph-label  { color: #5a9e6e; }
+  .tp-done    .tp-ph-detail { color: #4a4845; }
+
+  .tp-error   .tp-dot { background: #e8705a; }
+  .tp-error   .tp-ph-label  { color: #e8705a; }
+  .tp-error   .tp-ph-detail { color: #7a4035; }
+
+  @keyframes tp-blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.25; }
+  }
+
+  .tp-log {
+    border-top: 1px solid #1a1917;
+    padding: 5px 14px;
+    max-height: 64px;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 1px;
   }
-  #progress-area[hidden] { display: none; }
-  .progress-line {
-    font-family: var(--mono);
+  .tp-log:empty { border-top: none; padding: 0; }
+  .tp-log-line { font-size: 10px; color: #3a3835; }
+  .tp-log-line::before { content: '› '; color: #2a2825; }
+
+  .tp-footer {
+    border-top: 1px solid #1a1917;
+    padding: 7px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     font-size: 11px;
-    color: var(--text-secondary);
   }
-  .progress-line.done { color: var(--tier-ok-dot); }
-  .progress-line.error { color: var(--tier-hot-dot); }
+  .tp-footer[hidden] { display: none; }
+  .tp-f-counts { color: #6b6760; }
+  .tp-f-time   { color: #3a3835; }
 
   .empty { font-family: var(--mono); font-size: 13px; color: var(--text-secondary); }
 {% endblock %}
@@ -226,7 +289,15 @@
     {% endfor %}
   </div>
 
-  <div id="progress-area" hidden></div>
+  <div id="progress-panel" hidden>
+    <div class="tp-header">
+      <span id="tp-h-name" class="tp-h-name"></span>
+      <span id="tp-h-elapsed" class="tp-h-elapsed"></span>
+    </div>
+    <div id="tp-body" class="tp-body"></div>
+    <div id="tp-log" class="tp-log"></div>
+    <div id="tp-footer" class="tp-footer" hidden></div>
+  </div>
 
   {% else %}
   <p class="empty">No active courses found.</p>
@@ -238,6 +309,16 @@
   var SVG_REFRESH = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5"/><path d="M13.5 2.5v3h-3"/></svg>';
   var SVG_CHECK   = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 8 6 12 14 4"/></svg>';
 
+  var PHASES = ['enrollments', 'conversations', 'student_messages', 'discussions', 'saving'];
+  var PHASE_LABEL = {
+    enrollments:      'enrollments',
+    conversations:    'sent msgs',
+    student_messages: 'inbox msgs',
+    discussions:      'discussions',
+    saving:           'saving',
+  };
+
+  // ── Badge refresh ─────────────────────────────────────────────────────────
   function refreshBadge(card) {
     fetch(card.dataset.statsUrl)
       .then(function (r) { return r.json(); })
@@ -250,25 +331,100 @@
       });
   }
 
-  // courseId → { source, btn, line }
-  var activeSyncs = {};
+  // ── Terminal panel ────────────────────────────────────────────────────────
+  var panel      = document.getElementById('progress-panel');
+  var tpHName    = document.getElementById('tp-h-name');
+  var tpHElapsed = document.getElementById('tp-h-elapsed');
+  var tpBody     = document.getElementById('tp-body');
+  var tpLog      = document.getElementById('tp-log');
+  var tpFooter   = document.getElementById('tp-footer');
+  var phaseRows  = {};
+  var timerHnd   = null;
+  var tStart     = null;
 
-  function area() { return document.getElementById('progress-area'); }
+  function initPanel(name) {
+    panel.hidden = false;
+    tpHName.textContent = name;
+    tpHElapsed.textContent = '0.0s';
+    tpLog.innerHTML = '';
+    tpFooter.hidden = true;
+    tpFooter.innerHTML = '';
+    tpBody.innerHTML = '';
+    phaseRows = {};
 
-  function addLine(courseId, label) {
-    var line = document.createElement('div');
-    line.className = 'progress-line';
-    line.dataset.courseId = courseId;
-    line.textContent = label;
-    area().appendChild(line);
-    area().hidden = false;
-    return line;
+    PHASES.forEach(function (ph) {
+      var row = document.createElement('div');
+      row.className = 'tp-phase tp-idle';
+      row.innerHTML =
+        '<span class="tp-dot"></span>' +
+        '<span class="tp-ph-label">' + PHASE_LABEL[ph] + '</span>' +
+        '<span class="tp-ph-detail"></span>';
+      tpBody.appendChild(row);
+      phaseRows[ph] = row;
+    });
+
+    tStart = Date.now();
+    clearInterval(timerHnd);
+    timerHnd = setInterval(function () {
+      tpHElapsed.textContent = ((Date.now() - tStart) / 1000).toFixed(1) + 's';
+    }, 100);
   }
 
-  function removeLine(line) {
-    line.remove();
-    if (!area().children.length) area().hidden = true;
+  function stopTimer() {
+    clearInterval(timerHnd);
+    timerHnd = null;
+    if (tStart) tpHElapsed.textContent = ((Date.now() - tStart) / 1000).toFixed(1) + 's';
   }
+
+  function setPhase(ph, state, detail) {
+    var row = phaseRows[ph];
+    if (!row) return;
+    row.className = 'tp-phase tp-' + state;
+    if (detail !== undefined) row.querySelector('.tp-ph-detail').textContent = detail;
+  }
+
+  function addLog(text) {
+    var el = document.createElement('div');
+    el.className = 'tp-log-line';
+    el.textContent = text;
+    tpLog.appendChild(el);
+    tpLog.scrollTop = tpLog.scrollHeight;
+  }
+
+  function handleMsg(msg) {
+    var ph = msg.phase;
+    if (msg.status === 'start') {
+      setPhase(ph, 'loading', '');
+    } else if (msg.status === 'cached') {
+      setPhase(ph, 'cached', 'cached');
+    } else if (msg.status === 'page') {
+      if (ph === 'discussions') {
+        var label = 'topic ' + msg.n + (msg.topic ? ' · ' + msg.topic.substring(0, 36) : '');
+        setPhase(ph, 'loading', label);
+        addLog(label);
+      } else {
+        setPhase(ph, 'loading', 'page ' + msg.n);
+      }
+    } else if (msg.status === 'done_phase') {
+      var unit   = ph === 'enrollments' ? ' students' : ' events';
+      var timeStr = msg.elapsed_ms < 1000
+        ? msg.elapsed_ms + 'ms'
+        : (msg.elapsed_ms / 1000).toFixed(1) + 's';
+      setPhase(ph, 'done', msg.count + unit + ' · ' + timeStr);
+    } else if (msg.status === 'error') {
+      setPhase(ph, 'error', msg.msg ? msg.msg.substring(0, 50) : 'error');
+    } else if (msg.status === 'done') {
+      stopTimer();
+      tpFooter.hidden = false;
+      tpFooter.innerHTML =
+        '<span class="tp-f-counts">' + msg.count + ' events · ' + (msg.students || 0) + ' students</span>' +
+        '<span class="tp-f-time">' + (msg.elapsed_ms / 1000).toFixed(2) + 's total</span>';
+    }
+  }
+
+  // ── Active syncs ──────────────────────────────────────────────────────────
+  var activeSyncs = {};  // courseId → EventSource  (refresh-button syncs)
+  var navSource   = null;
 
   // ── Refresh button ────────────────────────────────────────────────────────
   document.querySelectorAll('.fetch-btn').forEach(function (btn) {
@@ -276,26 +432,26 @@
       e.preventDefault();
       e.stopPropagation();
 
-      var card      = btn.closest('a.course-link');
-      var courseId  = card.dataset.courseId;
-      var name      = card.dataset.courseName;
-      var syncUrl   = card.dataset.syncUrl;
+      var card    = btn.closest('a.course-link');
+      var cid     = card.dataset.courseId;
+      var name    = card.dataset.courseName;
+      var syncUrl = card.dataset.syncUrl;
 
-      if (activeSyncs[courseId]) return;
+      if (activeSyncs[cid]) return;
 
       btn.classList.add('loading');
       btn.setAttribute('data-tip', 'Fetching…');
-      var line = addLine(courseId, name + ': connecting…');
-      var source = new EventSource(syncUrl);
-      activeSyncs[courseId] = { source: source, btn: btn, line: line };
+      initPanel(name);
 
-      source.onmessage = function (evt) {
+      var src = new EventSource(syncUrl);
+      activeSyncs[cid] = src;
+
+      src.onmessage = function (evt) {
         var msg = JSON.parse(evt.data);
+        handleMsg(msg);
         if (msg.status === 'done') {
-          source.close();
-          delete activeSyncs[courseId];
-          line.textContent = name + ': done (' + msg.count + ' events)';
-          line.classList.add('done');
+          src.close();
+          delete activeSyncs[cid];
           btn.classList.remove('loading');
           btn.classList.add('done');
           btn.innerHTML = SVG_CHECK;
@@ -306,85 +462,63 @@
             btn.innerHTML = SVG_REFRESH;
             btn.setAttribute('data-tip', 'Refresh data');
           }, 2000);
-          setTimeout(function () { removeLine(line); }, 4000);
-        } else if (msg.status === 'error') {
-          source.close();
-          delete activeSyncs[courseId];
-          btn.classList.remove('loading');
-          btn.innerHTML = SVG_REFRESH;
-          btn.setAttribute('data-tip', 'Refresh data');
-          line.textContent = name + ': error — ' + msg.item;
-          line.classList.add('error');
-          setTimeout(function () { removeLine(line); }, 5000);
-        } else if (msg.status === 'fetching') {
-          line.textContent = name + ': fetching ' + msg.item + '…';
-        } else if (msg.status === 'fetching_page') {
-          line.textContent += '.';
-        } else if (msg.status === 'saving') {
-          line.textContent = name + ': saving…';
         }
       };
 
-      source.onerror = function () {
-        if (!activeSyncs[courseId]) return;
-        source.close();
-        delete activeSyncs[courseId];
+      src.onerror = function () {
+        if (!activeSyncs[cid]) return;
+        src.close();
+        delete activeSyncs[cid];
+        stopTimer();
         btn.classList.remove('loading');
         btn.innerHTML = SVG_REFRESH;
         btn.setAttribute('data-tip', 'Refresh data');
-        line.textContent = name + ': connection lost';
-        line.classList.add('error');
-        setTimeout(function () { removeLine(line); }, 3000);
+        PHASES.forEach(function (ph) {
+          if (phaseRows[ph] && phaseRows[ph].classList.contains('tp-loading')) {
+            setPhase(ph, 'error', 'connection lost');
+          }
+        });
       };
     });
   });
 
-  // ── Card click → sync then navigate ───────────────────────────────────────
-  var navSource = null;
-
+  // ── Card click → sync then navigate ──────────────────────────────────────
   document.querySelectorAll('a.course-link').forEach(function (link) {
     link.addEventListener('click', function (e) {
       e.preventDefault();
 
-      var destUrl  = this.href;
-      var syncUrl  = this.dataset.syncUrl;
-      var courseId = this.dataset.courseId;
-      var name     = this.dataset.courseName;
+      var destUrl = this.href;
+      var syncUrl = this.dataset.syncUrl;
+      var cid     = this.dataset.courseId;
+      var name    = this.dataset.courseName;
 
-      // If a refresh for this course is already running, just navigate
-      if (activeSyncs[courseId]) {
+      if (activeSyncs[cid]) {
         window.location.href = destUrl;
         return;
       }
 
       if (navSource) { navSource.close(); navSource = null; }
 
-      var line = addLine(courseId, name + ': connecting…');
-      navSource = new EventSource(syncUrl);
+      initPanel(name);
+      var src = new EventSource(syncUrl);
+      navSource = src;
 
-      navSource.onmessage = function (evt) {
+      src.onmessage = function (evt) {
         var msg = JSON.parse(evt.data);
+        handleMsg(msg);
         if (msg.status === 'done') {
-          navSource.close(); navSource = null;
+          src.close();
+          navSource = null;
           window.location.href = destUrl;
-        } else if (msg.status === 'error') {
-          navSource.close(); navSource = null;
-          line.textContent = name + ': error. Loading anyway…';
-          setTimeout(function () { window.location.href = destUrl; }, 1500);
-        } else if (msg.status === 'fetching') {
-          line.textContent = name + ': fetching ' + msg.item + '…';
-        } else if (msg.status === 'fetching_page') {
-          line.textContent += '.';
-        } else if (msg.status === 'saving') {
-          line.textContent = name + ': saving…';
         }
       };
 
-      navSource.onerror = function () {
-        if (!navSource) return;
-        navSource.close(); navSource = null;
-        line.textContent = name + ': connection lost. Loading…';
-        setTimeout(function () { window.location.href = destUrl; }, 500);
+      src.onerror = function () {
+        if (navSource !== src) return;
+        src.close();
+        navSource = null;
+        stopTimer();
+        setTimeout(function () { window.location.href = destUrl; }, 800);
       };
     });
   });

@@ -188,6 +188,21 @@ def test_stream_conversations_cache_hit_ignores_since():
     assert results == [([{'id': 42}], True)]
 
 
+def test_enrollment_cache_key_matches_canvas_client():
+    """_enrollment_cache_key in sync.py must produce the same digest as
+    CanvasClient._make_cache_key with the same path and params — they must
+    stay in sync or enrollment cache detection silently breaks."""
+    from app.services.sync import _enrollment_cache_key
+
+    cid = 99
+    client_key = CanvasClient._make_cache_key(
+        f'/api/v1/courses/{cid}/enrollments',
+        {'type[]': 'StudentEnrollment', 'state[]': 'active'},
+    )
+    sync_key = _enrollment_cache_key(cid)
+    assert sync_key == client_key
+
+
 def test_get_all_pages_caches_combined_result():
     resp1 = _mock_response(
         [{'id': 1}],

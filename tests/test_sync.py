@@ -482,3 +482,102 @@ def test_sync_falls_back_to_cutoff_when_no_marker():
     # depending on the time of day the test runs.
     age_days = (datetime.now(timezone.utc) - since_used).total_seconds() / 86400
     assert 21.0 <= age_days < 22.0
+
+
+# ---------------------------------------------------------------------------
+# New progress message shapes
+# ---------------------------------------------------------------------------
+
+def test_sync_yields_done_phase_for_all_five_phases():
+    """sync_course must emit a done_phase for each of the 5 named phases."""
+    client = _make_client(enrollments=[{'user_id': STUDENT_A}])
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        msgs = _run()
+
+    done_phases = {m['phase'] for m in msgs if m['status'] == 'done_phase'}
+    assert done_phases == {'enrollments', 'conversations', 'student_messages', 'discussions', 'saving'}
+
+
+def test_sync_done_message_has_students_count():
+    """The final done message must carry a 'students' key with unique student count."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}, {'user_id': STUDENT_B}],
+        conversations=[
+            {'id': 1001, 'last_authored_at': _days_ago(2), 'participants': [{'id': STUDENT_A}]},
+            {'id': 1002, 'last_authored_at': _days_ago(3), 'participants': [{'id': STUDENT_B}]},
+        ],
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        msgs = _run()
+
+    done = next(m for m in msgs if m['status'] == 'done')
+    assert 'students' in done
+    assert done['students'] == 2
+
+
+# ---------------------------------------------------------------------------
+# Per-phase error isolation
+# ---------------------------------------------------------------------------
+
+def test_sync_conversation_error_does_not_abort_discussions():
+    """A failure in the conversations phase must not prevent discussions from running."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        topics=[{'id': 201, 'title': 'Week 1'}],
+        entries_by_topic={201: [
+            {'id': 301, 'user_id': STUDENT_A, 'created_at': _days_ago(3), 'recent_replies': []},
+        ]},
+    )
+
+    def raise_on_sent(since=None, scope='sent'):
+        if scope == 'sent':
+            raise RuntimeError('network blip')
+        return iter([])
+
+    client.stream_conversations.side_effect = raise_on_sent
+
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        msgs = _run()
+
+    phases_with_errors = {m['phase'] for m in msgs if m['status'] == 'error'}
+    assert 'conversations' in phases_with_errors
+    # Discussions still ran — the entry must be in the DB
+    assert InteractionEvent.query.count() == 1
+
+
+def test_sync_enrollment_error_aborts():
+    """An enrollment failure must stop the generator — no subsequent phases run."""
+    mock = MagicMock()
+    mock.get_enrollments.side_effect = RuntimeError('Canvas down')
+    mock.get_current_user.return_value = {'id': INSTRUCTOR_ID}
+
+    with patch('app.services.sync.CanvasClient', return_value=mock):
+        msgs = _run()
+
+    assert any(m['status'] == 'error' for m in msgs)
+    # Generator returned early; no done_phase or done messages should appear
+    assert not any(m['status'] == 'done_phase' for m in msgs)
+    assert not any(m['status'] == 'done' for m in msgs)
+
+
+# ---------------------------------------------------------------------------
+# Enrollment cache detection
+# ---------------------------------------------------------------------------
+
+def test_sync_enrollment_cached_emits_cached_message():
+    """When the enrollment cache is warm, sync emits status='cached' for enrollments."""
+    from app.services.sync import _enrollment_cache_key
+
+    db.session.add(CanvasCache(
+        cache_key=_enrollment_cache_key(COURSE_ID),
+        response_json=[{'user_id': STUDENT_A}],
+        fetched_at=datetime.now(timezone.utc),
+        ttl_seconds=3600,
+    ))
+    db.session.commit()
+
+    client = _make_client(enrollments=[{'user_id': STUDENT_A}])
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        msgs = _run()
+
+    assert any(m['status'] == 'cached' and m['phase'] == 'enrollments' for m in msgs)

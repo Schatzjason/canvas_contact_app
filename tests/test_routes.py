@@ -4,12 +4,14 @@ Canvas API calls (CanvasClient) and sync are mocked.  InteractionEvent rows
 are seeded directly into the test DB so we can verify the route's staleness
 logic, sort order, and timeline rendering without needing a real Canvas token.
 """
+import json as _json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 from app import db
 from app.models.canvas_cache import CanvasCache
 from app.models.interaction_event import InteractionEvent
+from app.models.student_note import StudentNote
 
 COURSE_ID = 99
 STUDENT_A = 101
@@ -233,6 +235,66 @@ def test_student_page_unknown_student_still_200(client):
     with patch('app.routes.dashboard.CanvasClient', return_value=mock):
         response = client.get(f'/course/{COURSE_ID}/student/99999')
     assert response.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Notes (save_note endpoint)
+# ---------------------------------------------------------------------------
+
+def test_save_note_creates_note(client):
+    """POST to save_note creates a StudentNote row in the DB."""
+    response = client.post(
+        f'/course/{COURSE_ID}/student/{STUDENT_A}/note',
+        data=_json.dumps({'content': 'Good progress'}),
+        content_type='application/json',
+    )
+    assert response.status_code == 200
+    note = StudentNote.query.filter_by(
+        course_id=COURSE_ID, student_canvas_id=STUDENT_A
+    ).first()
+    assert note is not None
+    assert note.content == 'Good progress'
+
+
+def test_save_note_updates_existing(client):
+    """A second POST to save_note overwrites the first — exactly one row remains."""
+    for content in ('First note', 'Updated note'):
+        client.post(
+            f'/course/{COURSE_ID}/student/{STUDENT_A}/note',
+            data=_json.dumps({'content': content}),
+            content_type='application/json',
+        )
+    assert StudentNote.query.count() == 1
+    assert StudentNote.query.first().content == 'Updated note'
+
+
+# ---------------------------------------------------------------------------
+# Compose page
+# ---------------------------------------------------------------------------
+
+def test_compose_get_200(client):
+    """GET /compose returns 200 and includes the student's name."""
+    with patch('app.routes.dashboard.CanvasClient',
+               return_value=_mock_client_with_name('Alice Smith')):
+        response = client.get(f'/course/{COURSE_ID}/student/{STUDENT_A}/compose')
+    assert response.status_code == 200
+    assert b'Alice Smith' in response.data
+
+
+def test_compose_post_redirects_to_student(client):
+    """POST /compose redirects back to the student detail page."""
+    from app.services.canvas_client import CanvasClient as _RealClient
+    # The route calls CanvasClient._make_cache_key (static method on the class).
+    # Preserve the real implementation so the DB query receives a string, not a MagicMock.
+    with patch('app.routes.dashboard.CanvasClient') as MockClass:
+        MockClass.return_value = _mock_client_with_name('Alice Smith')
+        MockClass._make_cache_key.side_effect = _RealClient._make_cache_key
+        response = client.post(
+            f'/course/{COURSE_ID}/student/{STUDENT_A}/compose',
+            data={'subject': 'Checking in', 'body': 'Hi Alice'},
+        )
+    assert response.status_code == 302
+    assert f'/course/{COURSE_ID}/student/{STUDENT_A}' in response.location
 
 
 # ---------------------------------------------------------------------------
