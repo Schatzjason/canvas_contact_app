@@ -93,6 +93,26 @@
   .post-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; font-size: 13.5px; line-height: 1.65; color: var(--text-primary); white-space: pre-wrap; word-break: break-word; }
   .post-card.empty { color: var(--text-tertiary); font-style: italic; }
 
+  /* ── NOTES ───────────────────────────────────────────────── */
+  .notes-textarea {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-family: var(--sans);
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: var(--text-primary);
+    resize: none;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    overflow: hidden;
+  }
+  .notes-textarea::placeholder { color: var(--text-tertiary); font-style: italic; }
+  .notes-textarea:focus { border-color: var(--border-strong); box-shadow: 0 0 0 3px rgba(0,0,0,0.04); }
+  .notes-status { font-family: var(--mono); font-size: 10px; color: var(--text-tertiary); margin-top: 5px; min-height: 14px; transition: opacity 0.3s; }
+
   /* ── TIMELINE ────────────────────────────────────────────── */
   .timeline { margin-top: 4px; }
 
@@ -230,6 +250,13 @@
   </div>
 
   <div class="section">
+    <div class="section-title">Notes</div>
+    <textarea id="notes-area" class="notes-textarea"
+              placeholder="Add notes about this student…">{{ note_content }}</textarea>
+    <div class="notes-status" id="notes-status"></div>
+  </div>
+
+  <div class="section">
     <div class="section-title">Last 21 Days</div>
     <div class="timeline">
       {% for day in days | reverse %}
@@ -356,6 +383,54 @@ const DRAWER_DATA = {{ day_drawer | tojson }};
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') closeDrawer();
   });
+})();
+</script>
+
+<script>
+(function () {
+  var ta     = document.getElementById('notes-area');
+  var status = document.getElementById('notes-status');
+  var saveUrl = {{ url_for('dashboard.save_note', course_id=course.id, student_id=student_id) | tojson }};
+  var LINE_HEIGHT = 1.65;   // matches CSS line-height
+  var MIN_ROWS    = 3;
+  var EXTRA_ROWS  = 2;
+  var MAX_ROWS    = 15;
+  var saveTimer   = null;
+
+  function resize() {
+    var content = ta.value;
+    var lineCount = content === '' ? 0 : content.split('\n').length;
+    var rows = content === ''
+      ? MIN_ROWS
+      : Math.min(MAX_ROWS, lineCount + EXTRA_ROWS);
+    rows = Math.max(MIN_ROWS, rows);
+    ta.rows = rows;
+  }
+
+  function save() {
+    fetch(saveUrl, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({content: ta.value}),
+    }).then(function () {
+      status.textContent = 'Saved';
+      status.style.opacity = '1';
+      setTimeout(function () { status.style.opacity = '0'; }, 1500);
+    }).catch(function () {
+      status.textContent = 'Save failed';
+      status.style.opacity = '1';
+    });
+  }
+
+  ta.addEventListener('input', function () {
+    resize();
+    clearTimeout(saveTimer);
+    status.textContent = '';
+    saveTimer = setTimeout(save, 800);
+  });
+
+  // Set initial size on page load
+  resize();
 })();
 </script>
 {% endblock %}

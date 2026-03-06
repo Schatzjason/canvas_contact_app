@@ -10,6 +10,7 @@ from flask import redirect, request, url_for
 from app import db
 from app.models.canvas_cache import CanvasCache
 from app.models.interaction_event import InteractionEvent
+from app.models.student_note import StudentNote
 from app.services.canvas_client import CanvasClient
 from app.services.sync import run_sync, sync_course
 
@@ -460,6 +461,11 @@ def student(course_id, student_id):
         else:
             staleness = 'red'
 
+    note_row = StudentNote.query.filter_by(
+        course_id=course_id, student_canvas_id=student_id
+    ).first()
+    note_content = note_row.content if note_row else ''
+
     return render_template('dashboard/student.html',
         course=course_obj,
         student_id=student_id,
@@ -471,7 +477,28 @@ def student(course_id, student_id):
         today=today,
         active_days=active_days,
         day_drawer=day_drawer,
+        note_content=note_content,
     )
+
+
+@bp.route('/course/<int:course_id>/student/<int:student_id>/note', methods=['POST'])
+def save_note(course_id, student_id):
+    content = request.get_json(force=True).get('content', '')
+    note = StudentNote.query.filter_by(
+        course_id=course_id, student_canvas_id=student_id
+    ).first()
+    if note:
+        note.content = content
+        note.updated_at = datetime.now(timezone.utc)
+    else:
+        note = StudentNote(
+            course_id=course_id,
+            student_canvas_id=student_id,
+            content=content,
+        )
+        db.session.add(note)
+    db.session.commit()
+    return {'ok': True}
 
 
 @bp.route('/course/<int:course_id>/student/<int:student_id>/compose', methods=['GET', 'POST'])
