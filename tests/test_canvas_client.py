@@ -203,6 +203,68 @@ def test_enrollment_cache_key_matches_canvas_client():
     assert sync_key == client_key
 
 
+# ---------------------------------------------------------------------------
+# stream_conversations: client-side cutoff
+# ---------------------------------------------------------------------------
+
+def test_stream_conversations_stops_when_page_triggers_cutoff():
+    """When a page contains a conversation older than `since`, pagination stops
+    and that old conversation is excluded from results."""
+    since = datetime(2026, 3, 1, tzinfo=timezone.utc)
+    page1 = [{'id': 1, 'last_message_at': '2026-03-05T12:00:00+00:00'}]
+    page2 = [{'id': 2, 'last_message_at': '2026-02-20T12:00:00+00:00'}]  # older than since
+
+    resp1 = _mock_response(page1, link_header='<https://canvas.test/p2>; rel="next"')
+    resp2 = _mock_response(page2)
+
+    with patch('requests.get', side_effect=[resp1, resp2]) as mock_get:
+        client = CanvasClient()
+        pages = list(client.stream_conversations(since=since))
+
+    assert mock_get.call_count == 2
+    all_convs = [c for page, _ in pages for c in page]
+    assert len(all_convs) == 1
+    assert all_convs[0]['id'] == 1
+
+
+def test_stream_conversations_filters_partial_page():
+    """A page mixing new and old conversations: new ones kept, old one truncates the page."""
+    since = datetime(2026, 3, 1, tzinfo=timezone.utc)
+    page1 = [
+        {'id': 10, 'last_message_at': '2026-03-05T12:00:00+00:00'},  # keep
+        {'id': 11, 'last_message_at': '2026-02-15T12:00:00+00:00'},  # triggers cutoff
+        {'id': 12, 'last_message_at': '2026-02-10T12:00:00+00:00'},  # never reached
+    ]
+    resp1 = _mock_response(page1, link_header='<https://canvas.test/p2>; rel="next"')
+
+    with patch('requests.get', side_effect=[resp1]) as mock_get:
+        client = CanvasClient()
+        pages = list(client.stream_conversations(since=since))
+
+    assert mock_get.call_count == 1  # no second fetch
+    all_convs = [c for page, _ in pages for c in page]
+    assert [c['id'] for c in all_convs] == [10]
+
+
+def test_stream_conversations_no_since_fetches_all_pages():
+    """Without a `since` filter, all pages are fetched regardless of dates."""
+    page1 = [{'id': 1, 'last_message_at': '2026-02-01T12:00:00+00:00'}]
+    page2 = [{'id': 2, 'last_message_at': '2025-01-01T12:00:00+00:00'}]
+
+    resp1 = _mock_response(page1, link_header='<https://canvas.test/p2>; rel="next"')
+    resp2 = _mock_response(page2)
+
+    with patch('requests.get', side_effect=[resp1, resp2]) as mock_get:
+        client = CanvasClient()
+        pages = list(client.stream_conversations())
+
+    assert mock_get.call_count == 2
+    all_convs = [c for page, _ in pages for c in page]
+    assert len(all_convs) == 2
+
+
+# ---------------------------------------------------------------------------
+
 def test_get_all_pages_caches_combined_result():
     resp1 = _mock_response(
         [{'id': 1}],

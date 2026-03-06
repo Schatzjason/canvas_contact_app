@@ -281,20 +281,70 @@ def test_compose_get_200(client):
     assert b'Alice Smith' in response.data
 
 
-def test_compose_post_redirects_to_student(client):
-    """POST /compose redirects back to the student detail page."""
+def _compose_post(client, conv_response=None):
+    """Helper: POST to compose with a mocked send_message return value."""
     from app.services.canvas_client import CanvasClient as _RealClient
-    # The route calls CanvasClient._make_cache_key (static method on the class).
-    # Preserve the real implementation so the DB query receives a string, not a MagicMock.
+    if conv_response is None:
+        conv_response = [{'id': 9999, 'last_authored_at': '2026-03-06T12:00:00+00:00'}]
     with patch('app.routes.dashboard.CanvasClient') as MockClass:
         MockClass.return_value = _mock_client_with_name('Alice Smith')
+        MockClass.return_value.send_message.return_value = conv_response
         MockClass._make_cache_key.side_effect = _RealClient._make_cache_key
-        response = client.post(
+        return client.post(
             f'/course/{COURSE_ID}/student/{STUDENT_A}/compose',
             data={'subject': 'Checking in', 'body': 'Hi Alice'},
         )
+
+
+def test_compose_post_redirects_to_student(client):
+    """POST /compose redirects back to the student detail page."""
+    response = _compose_post(client)
     assert response.status_code == 302
     assert f'/course/{COURSE_ID}/student/{STUDENT_A}' in response.location
+
+
+def test_compose_post_writes_interaction_event(client):
+    """A successful send creates an InteractionEvent directly in the DB."""
+    _compose_post(client)
+    event = InteractionEvent.query.filter_by(
+        course_id=COURSE_ID,
+        student_canvas_id=STUDENT_A,
+        event_type='conversation',
+        source_id=9999,
+    ).first()
+    assert event is not None
+
+
+def test_compose_post_prepends_to_sent_cache(client):
+    """Sending prepends the new conv to the existing sent cache without replacing it."""
+    from app.services.canvas_client import CanvasClient as _RealClient
+    sent_key = _RealClient._make_cache_key('/api/v1/conversations', {'scope': 'sent'})
+    db.session.add(CanvasCache(
+        cache_key=sent_key,
+        response_json=[{'id': 1}],
+        fetched_at=datetime.now(timezone.utc),
+        ttl_seconds=1800,
+    ))
+    db.session.commit()
+
+    _compose_post(client)
+
+    entry = CanvasCache.query.filter_by(cache_key=sent_key).first()
+    assert entry is not None
+    assert entry.response_json[0]['id'] == 9999  # new conv first
+    assert entry.response_json[1]['id'] == 1     # old conv preserved
+
+
+def test_compose_post_creates_sent_cache_when_missing(client):
+    """If there is no existing sent cache, a new entry is created."""
+    from app.services.canvas_client import CanvasClient as _RealClient
+    sent_key = _RealClient._make_cache_key('/api/v1/conversations', {'scope': 'sent'})
+
+    _compose_post(client)
+
+    entry = CanvasCache.query.filter_by(cache_key=sent_key).first()
+    assert entry is not None
+    assert entry.response_json[0]['id'] == 9999
 
 
 # ---------------------------------------------------------------------------
