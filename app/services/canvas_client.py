@@ -224,6 +224,24 @@ class CanvasClient:
 
         self._cache_write(cache_key, results, TTL_CONVERSATIONS)
 
+    def send_message(self, recipient_id, subject, body, course_id=None):
+        """Send a Canvas inbox message to a single recipient."""
+        params = {
+            'recipients[]': [recipient_id],
+            'subject': subject,
+            'body': body,
+        }
+        if course_id is not None:
+            params['context_code'] = f'course_{course_id}'
+        resp = requests.post(
+            f'{self.base_url}/api/v1/conversations',
+            headers=self._auth_headers(),
+            params=params,
+            timeout=15,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     def get_discussion_topics(self, course_id):
         """All discussion topics for a course (cached 15 min)."""
         return self._get_all_pages(

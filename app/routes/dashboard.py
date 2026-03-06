@@ -11,7 +11,7 @@ from app import db
 from app.models.canvas_cache import CanvasCache
 from app.models.interaction_event import InteractionEvent
 from app.models.student_note import StudentNote
-from app.services.canvas_client import CanvasClient
+from app.services.canvas_client import CanvasClient, TTL_CONVERSATIONS
 from app.services.sync import run_sync, sync_course
 
 bp = Blueprint('dashboard', __name__)
@@ -528,21 +528,46 @@ def compose(course_id, student_id):
     if request.method == 'POST':
         subject = request.form.get('subject', '').strip()
         body    = request.form.get('body', '').strip()
-        print(f'\n{"="*60}')
-        print(f'[STUB] Canvas inbox message')
-        print(f'  To:      {student_name} (canvas_id={student_id})')
-        print(f'  Course:  {course_obj.get("course_code", course_id)} (id={course_id})')
-        print(f'  Subject: {subject}')
-        print(f'  Body:\n{body}')
-        print(f'{"="*60}\n')
+        try:
+            result   = client.send_message(student_id, subject, body, course_id=course_id)
+            now      = datetime.now(timezone.utc)
+            new_conv = result[0] if isinstance(result, list) and result else None
 
-        # Invalidate conversation cache so the next sync picks up the sent message
-        for scope in ('sent', 'inbox'):
-            key = CanvasClient._make_cache_key('/api/v1/conversations', {'scope': scope})
-            CanvasCache.query.filter_by(cache_key=key).delete()
-        db.session.commit()
+            if new_conv:
+                # Record the event directly — no re-fetch needed
+                ts_str      = new_conv.get('last_authored_at') or new_conv.get('last_message_at')
+                occurred_at = datetime.fromisoformat(ts_str) if ts_str else now
+                db.session.add(InteractionEvent(
+                    course_id=course_id,
+                    student_canvas_id=student_id,
+                    event_type='conversation',
+                    occurred_at=occurred_at,
+                    source_id=new_conv['id'],
+                ))
 
-        flash(f'[Stub] Message to {student_name} printed to terminal.')
+                # Prepend new conversation to the sent cache so syncs stay fast
+                sent_key   = CanvasClient._make_cache_key('/api/v1/conversations', {'scope': 'sent'})
+                sent_entry = CanvasCache.query.filter_by(cache_key=sent_key).first()
+                if sent_entry:
+                    sent_entry.response_json = [new_conv] + (sent_entry.response_json or [])
+                    sent_entry.fetched_at    = now
+                else:
+                    db.session.add(CanvasCache(
+                        cache_key=sent_key,
+                        response_json=[new_conv],
+                        fetched_at=now,
+                        ttl_seconds=TTL_CONVERSATIONS,
+                    ))
+            else:
+                # Canvas returned no conversation object — fall back to cache invalidation
+                sent_key = CanvasClient._make_cache_key('/api/v1/conversations', {'scope': 'sent'})
+                CanvasCache.query.filter_by(cache_key=sent_key).delete()
+
+            db.session.commit()
+            flash(f'Message sent to {student_name}.')
+        except Exception as exc:
+            current_app.logger.error('send_message failed: %s', exc)
+            flash(f'Could not send message: {exc}')
         return redirect(url_for('dashboard.student', course_id=course_id, student_id=student_id))
 
     first_name = student_name.split()[0] if student_name else ''
