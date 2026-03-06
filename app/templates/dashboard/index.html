@@ -156,87 +156,124 @@
   }
   .card:hover .card-arrow { color: var(--accent); transform: translateX(3px); }
 
-  /* ── Terminal progress panel ──────────────────────────────────── */
+  /* ── Sync progress panel (Variant A) ──────────────────────────── */
   #progress-panel {
-    margin-top: 16px;
+    margin-top: 4px;
     background: #111;
-    border: 1px solid #222;
-    border-radius: 8px;
-    font-family: var(--mono);
+    border-radius: 6px;
     overflow: hidden;
+    font-family: var(--mono);
+    font-size: 12px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.18);
   }
   #progress-panel[hidden] { display: none; }
 
+  /* Header */
   .tp-header {
+    background: #1a1a1a;
+    padding: 10px 16px;
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 9px 14px;
-    border-bottom: 1px solid #1a1917;
+    gap: 10px;
+    border-bottom: 1px solid #2a2a2a;
   }
-  .tp-h-name    { color: #c8c4bb; font-size: 12px; font-weight: 500; letter-spacing: 0.02em; }
-  .tp-h-elapsed { color: #333; font-size: 11px; }
-
-  .tp-body { padding: 5px 0; }
-  .tp-phase {
-    display: grid;
-    grid-template-columns: 8px 102px 1fr;
-    align-items: center;
-    column-gap: 10px;
-    padding: 4px 14px;
-    font-size: 11px;
+  .tp-h-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #e67e22;
+    flex-shrink: 0;
+    animation: tp-pulse 1.2s ease-in-out infinite;
   }
-  .tp-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .tp-h-dot.done  { background: #27ae60; animation: none; }
+  .tp-h-dot.error { background: #c0392b; animation: none; }
+  .tp-h-name    { color: #fff; font-size: 12px; font-weight: 500; }
+  .tp-h-spacer  { flex: 1; }
+  .tp-h-elapsed { color: #555; font-size: 11px; }
+  .tp-h-elapsed.done  { color: #27ae60; }
+  .tp-h-elapsed.error { color: #c0392b; }
 
-  .tp-idle    .tp-dot { background: #282622; }
-  .tp-idle    .tp-ph-label { color: #333; }
-  .tp-idle    .tp-ph-detail { color: #333; }
+  /* Phase list */
+  .tp-phases { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
 
-  .tp-loading .tp-dot { background: #d4a012; animation: tp-blink 0.9s ease-in-out infinite; }
-  .tp-loading .tp-ph-label  { color: #d4a012; }
-  .tp-loading .tp-ph-detail { color: #7a6830; }
+  .tp-phase { display: flex; flex-direction: column; gap: 4px; }
 
-  .tp-cached  .tp-dot { background: #5a9e6e; }
-  .tp-cached  .tp-ph-label  { color: #5a9e6e; }
-  .tp-cached  .tp-ph-detail { color: #3e6b4d; }
+  .tp-phase-hd { display: flex; align-items: center; gap: 10px; }
 
-  .tp-done    .tp-dot { background: #5a9e6e; }
-  .tp-done    .tp-ph-label  { color: #5a9e6e; }
-  .tp-done    .tp-ph-detail { color: #4a4845; }
+  .tp-icon {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 500;
+  }
+  .tp-icon.pending { background: #2a2a2a; color: #444; border: 1px solid #333; }
+  .tp-icon.loading { background: #e67e22; color: #111; animation: tp-pulse 1s ease-in-out infinite; }
+  .tp-icon.done    { background: #27ae60; color: #fff; }
+  .tp-icon.cached  { background: #27ae60; color: #fff; }
+  .tp-icon.error   { background: #c0392b; color: #fff; }
 
-  .tp-error   .tp-dot { background: #e8705a; }
-  .tp-error   .tp-ph-label  { color: #e8705a; }
-  .tp-error   .tp-ph-detail { color: #7a4035; }
+  .tp-ph-name { font-size: 12px; font-weight: 500; }
+  .tp-ph-name.pending { color: #444; }
+  .tp-ph-name.loading { color: #fff; }
+  .tp-ph-name.done    { color: #888; }
+  .tp-ph-name.cached  { color: #888; }
+  .tp-ph-name.error   { color: #c0392b; }
 
-  @keyframes tp-blink {
-    0%, 100% { opacity: 1; }
-    50%       { opacity: 0.25; }
+  .tp-ph-meta { color: #555; font-size: 11px; margin-left: 26px; }
+  .tp-ph-meta .tp-count      { color: #e67e22; }
+  .tp-ph-meta .tp-count.done { color: #27ae60; }
+  .tp-ph-meta .tp-ms         { color: #444; margin-left: 8px; }
+
+  /* Indeterminate progress bar on active phase */
+  .tp-bar-wrap {
+    margin-left: 26px;
+    height: 3px;
+    background: #222;
+    border-radius: 2px;
+    overflow: hidden;
+    width: 200px;
+  }
+  .tp-bar {
+    height: 100%;
+    border-radius: 2px;
+    background: #e67e22;
+    width: 38%;
+    animation: tp-slide 1.4s ease-in-out infinite;
+  }
+  @keyframes tp-slide {
+    0%   { transform: translateX(-150%); }
+    100% { transform: translateX(400%); }
   }
 
-  .tp-log {
-    border-top: 1px solid #1a1917;
-    padding: 5px 14px;
-    max-height: 64px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-  }
-  .tp-log:empty { border-top: none; padding: 0; }
-  .tp-log-line { font-size: 10px; color: #3a3835; }
-  .tp-log-line::before { content: '› '; color: #2a2825; }
+  /* Per-phase log lines */
+  .tp-phase-log { margin-left: 26px; display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
+  .tp-ll { font-size: 11px; color: #444; }
+  .tp-ll.active { color: #aaa; }
+  .tp-ll .tp-ll-hi { color: #e67e22; }
 
+  /* Dividers between phases */
+  .tp-divider { border: none; border-top: 1px solid #1e1e1e; margin: 0 0 0 26px; }
+
+  /* Footer */
   .tp-footer {
-    border-top: 1px solid #1a1917;
-    padding: 7px 14px;
+    border-top: 1px solid #1e1e1e;
+    padding: 10px 16px;
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    gap: 16px;
     font-size: 11px;
   }
   .tp-footer[hidden] { display: none; }
-  .tp-f-counts { color: #6b6760; }
-  .tp-f-time   { color: #3a3835; }
+  .tp-f-stat { color: #555; }
+  .tp-f-stat .tp-f-val      { color: #888; margin-left: 3px; }
+  .tp-f-stat .tp-f-val.good { color: #27ae60; }
+  .tp-f-stat .tp-f-val.warn { color: #e67e22; }
+  .tp-f-spacer { flex: 1; }
+
+  @keyframes tp-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.4; transform: scale(0.7); }
+  }
 
   .empty { font-family: var(--mono); font-size: 13px; color: var(--text-secondary); }
 {% endblock %}
@@ -291,11 +328,12 @@
 
   <div id="progress-panel" hidden>
     <div class="tp-header">
+      <span id="tp-h-dot" class="tp-h-dot"></span>
       <span id="tp-h-name" class="tp-h-name"></span>
+      <span class="tp-h-spacer"></span>
       <span id="tp-h-elapsed" class="tp-h-elapsed"></span>
     </div>
-    <div id="tp-body" class="tp-body"></div>
-    <div id="tp-log" class="tp-log"></div>
+    <div id="tp-phases" class="tp-phases"></div>
     <div id="tp-footer" class="tp-footer" hidden></div>
   </div>
 
@@ -311,11 +349,11 @@
 
   var PHASES = ['enrollments', 'conversations', 'student_messages', 'discussions', 'saving'];
   var PHASE_LABEL = {
-    enrollments:      'enrollments',
-    conversations:    'sent msgs',
-    student_messages: 'inbox msgs',
-    discussions:      'discussions',
-    saving:           'saving',
+    enrollments:      'Enrollments',
+    conversations:    'Msgs from instructor',
+    student_messages: 'Msgs from student',
+    discussions:      'Discussion topics',
+    saving:           'Save to database',
   };
 
   // ── Badge refresh ─────────────────────────────────────────────────────────
@@ -331,35 +369,50 @@
       });
   }
 
-  // ── Terminal panel ────────────────────────────────────────────────────────
+  // ── Panel elements ────────────────────────────────────────────────────────
   var panel      = document.getElementById('progress-panel');
+  var tpHDot     = document.getElementById('tp-h-dot');
   var tpHName    = document.getElementById('tp-h-name');
   var tpHElapsed = document.getElementById('tp-h-elapsed');
-  var tpBody     = document.getElementById('tp-body');
-  var tpLog      = document.getElementById('tp-log');
+  var tpPhases   = document.getElementById('tp-phases');
   var tpFooter   = document.getElementById('tp-footer');
-  var phaseRows  = {};
-  var timerHnd   = null;
-  var tStart     = null;
 
+  var phaseRows     = {};   // phase → .tp-phase element
+  var timerHnd      = null;
+  var tStart        = null;
+  var totalStudents = 0;    // from enrollments done_phase
+  var runningEvents = 0;    // accumulated from conv/msg/disc done_phase
+  var cachedPhases  = [];   // phases that emitted 'cached'
+
+  // ── Panel init ────────────────────────────────────────────────────────────
   function initPanel(name) {
     panel.hidden = false;
+    tpHDot.className = 'tp-h-dot';
     tpHName.textContent = name;
+    tpHElapsed.className = 'tp-h-elapsed';
     tpHElapsed.textContent = '0.0s';
-    tpLog.innerHTML = '';
     tpFooter.hidden = true;
     tpFooter.innerHTML = '';
-    tpBody.innerHTML = '';
+    tpPhases.innerHTML = '';
     phaseRows = {};
+    totalStudents = 0;
+    runningEvents = 0;
+    cachedPhases = [];
 
-    PHASES.forEach(function (ph) {
+    PHASES.forEach(function (ph, i) {
+      if (i > 0) {
+        var hr = document.createElement('hr');
+        hr.className = 'tp-divider';
+        tpPhases.appendChild(hr);
+      }
       var row = document.createElement('div');
-      row.className = 'tp-phase tp-idle';
+      row.className = 'tp-phase';
       row.innerHTML =
-        '<span class="tp-dot"></span>' +
-        '<span class="tp-ph-label">' + PHASE_LABEL[ph] + '</span>' +
-        '<span class="tp-ph-detail"></span>';
-      tpBody.appendChild(row);
+        '<div class="tp-phase-hd">' +
+          '<div class="tp-icon pending">' + (i + 1) + '</div>' +
+          '<div class="tp-ph-name pending">' + PHASE_LABEL[ph] + '</div>' +
+        '</div>';
+      tpPhases.appendChild(row);
       phaseRows[ph] = row;
     });
 
@@ -373,57 +426,180 @@
   function stopTimer() {
     clearInterval(timerHnd);
     timerHnd = null;
-    if (tStart) tpHElapsed.textContent = ((Date.now() - tStart) / 1000).toFixed(1) + 's';
   }
 
-  function setPhase(ph, state, detail) {
+  // ── Phase helpers ─────────────────────────────────────────────────────────
+  function phaseIcon(ph) {
     var row = phaseRows[ph];
-    if (!row) return;
-    row.className = 'tp-phase tp-' + state;
-    if (detail !== undefined) row.querySelector('.tp-ph-detail').textContent = detail;
+    return row ? row.querySelector('.tp-icon') : null;
+  }
+  function phaseName(ph) {
+    var row = phaseRows[ph];
+    return row ? row.querySelector('.tp-ph-name') : null;
   }
 
-  function addLog(text) {
-    var el = document.createElement('div');
-    el.className = 'tp-log-line';
-    el.textContent = text;
-    tpLog.appendChild(el);
-    tpLog.scrollTop = tpLog.scrollHeight;
+  function setPhaseState(ph, state, iconText) {
+    var icon = phaseIcon(ph);
+    var name = phaseName(ph);
+    if (!icon || !name) return;
+    icon.className = 'tp-icon ' + state;
+    if (iconText !== undefined) icon.textContent = iconText;
+    name.className = 'tp-ph-name ' + state;
   }
 
+  function ensureBar(ph) {
+    var row = phaseRows[ph];
+    if (!row || row.querySelector('.tp-bar-wrap')) return;
+    var wrap = document.createElement('div');
+    wrap.className = 'tp-bar-wrap';
+    wrap.innerHTML = '<div class="tp-bar"></div>';
+    row.appendChild(wrap);
+  }
+
+  function removeBar(ph) {
+    var row = phaseRows[ph];
+    var wrap = row && row.querySelector('.tp-bar-wrap');
+    if (wrap) wrap.remove();
+  }
+
+  function ensureLog(ph) {
+    var row = phaseRows[ph];
+    if (!row) return null;
+    var log = row.querySelector('.tp-phase-log');
+    if (!log) {
+      log = document.createElement('div');
+      log.className = 'tp-phase-log';
+      row.appendChild(log);
+    }
+    return log;
+  }
+
+  function setMeta(ph, html) {
+    var hd = phaseRows[ph] && phaseRows[ph].querySelector('.tp-phase-hd');
+    if (!hd) return;
+    var meta = hd.querySelector('.tp-ph-meta');
+    if (!meta) {
+      meta = document.createElement('div');
+      meta.className = 'tp-ph-meta';
+      hd.appendChild(meta);
+    }
+    meta.innerHTML = html;
+  }
+
+  function addLogLine(ph, html, isActive) {
+    var log = ensureLog(ph);
+    if (!log) return;
+    // demote previous active line
+    var prev = log.querySelector('.tp-ll.active');
+    if (prev) prev.classList.remove('active');
+    var line = document.createElement('div');
+    line.className = 'tp-ll' + (isActive ? ' active' : '');
+    line.innerHTML = html;
+    log.appendChild(line);
+  }
+
+  // ── Footer update ─────────────────────────────────────────────────────────
+  function updateFooter() {
+    tpFooter.hidden = false;
+    var html = '<div class="tp-f-stat">events so far <span class="tp-f-val warn">' + runningEvents + '</span></div>';
+    if (totalStudents) {
+      html += '<div class="tp-f-stat">students <span class="tp-f-val">' + totalStudents + '</span></div>';
+    }
+    if (cachedPhases.length) {
+      html += '<div class="tp-f-stat">cached <span class="tp-f-val good">' + cachedPhases.map(function(p){ return PHASE_LABEL[p]; }).join(', ') + '</span></div>';
+    }
+    html += '<span class="tp-f-spacer"></span>';
+    tpFooter.innerHTML = html;
+  }
+
+  function finalFooter(msg) {
+    tpFooter.hidden = false;
+    tpFooter.innerHTML =
+      '<div class="tp-f-stat">total events <span class="tp-f-val good">' + msg.count + '</span></div>' +
+      '<div class="tp-f-stat">students with activity <span class="tp-f-val good">' + (msg.students || 0) + ' / ' + totalStudents + '</span></div>' +
+      (cachedPhases.length ? '<div class="tp-f-stat">cached <span class="tp-f-val good">' + cachedPhases.map(function(p){ return PHASE_LABEL[p]; }).join(', ') + '</span></div>' : '') +
+      '<span class="tp-f-spacer"></span>' +
+      '<div class="tp-f-stat" style="color:#27ae60">● live fetch</div>';
+  }
+
+  // ── Message handler ───────────────────────────────────────────────────────
   function handleMsg(msg) {
     var ph = msg.phase;
+
     if (msg.status === 'start') {
-      setPhase(ph, 'loading', '');
+      setPhaseState(ph, 'loading', '▶');
+      ensureBar(ph);
+
     } else if (msg.status === 'cached') {
-      setPhase(ph, 'cached', 'cached');
+      cachedPhases.push(ph);
+      setPhaseState(ph, 'cached', '✓');
+      removeBar(ph);
+      setMeta(ph, '<span class="tp-count done">cached</span>');
+      updateFooter();
+
     } else if (msg.status === 'page') {
+      setPhaseState(ph, 'loading', '▶');
       if (ph === 'discussions') {
-        var label = 'topic ' + msg.n + (msg.topic ? ' · ' + msg.topic.substring(0, 36) : '');
-        setPhase(ph, 'loading', label);
-        addLog(label);
+        var title = msg.topic ? msg.topic.substring(0, 40) : '';
+        addLogLine(ph,
+          'topic ' + msg.n + (title ? ' — <span class="tp-ll-hi">' + title + '</span>' : '') +
+          ' <span class="tp-ll-hi">fetching…</span>',
+          true);
       } else {
-        setPhase(ph, 'loading', 'page ' + msg.n);
+        addLogLine(ph, 'page ' + msg.n, true);
       }
+
     } else if (msg.status === 'done_phase') {
-      var unit   = ph === 'enrollments' ? ' students' : ' events';
-      var timeStr = msg.elapsed_ms < 1000
+      setPhaseState(ph, 'done', '✓');
+      removeBar(ph);
+      var t = msg.elapsed_ms < 1000
         ? msg.elapsed_ms + 'ms'
         : (msg.elapsed_ms / 1000).toFixed(1) + 's';
-      setPhase(ph, 'done', msg.count + unit + ' · ' + timeStr);
+      var countStr;
+      if (ph === 'enrollments') {
+        totalStudents = msg.count;
+        countStr = msg.count + ' students';
+      } else if (ph === 'saving') {
+        countStr = msg.count + ' events upserted';
+      } else {
+        runningEvents += msg.count;
+        countStr = msg.count + ' events matched';
+      }
+      setMeta(ph, '<span class="tp-count done">' + countStr + '</span><span class="tp-ms">· ' + t + '</span>');
+      updateFooter();
+
     } else if (msg.status === 'error') {
-      setPhase(ph, 'error', msg.msg ? msg.msg.substring(0, 50) : 'error');
+      setPhaseState(ph, 'error', '✕');
+      removeBar(ph);
+      if (msg.msg) {
+        var row = phaseRows[ph];
+        var errEl = document.createElement('div');
+        errEl.style.cssText = 'font-size:11px;color:#c0392b;margin-left:26px;margin-top:2px;';
+        errEl.textContent = msg.msg.substring(0, 70);
+        row.appendChild(errEl);
+      }
+
     } else if (msg.status === 'done') {
       stopTimer();
-      tpFooter.hidden = false;
-      tpFooter.innerHTML =
-        '<span class="tp-f-counts">' + msg.count + ' events · ' + (msg.students || 0) + ' students</span>' +
-        '<span class="tp-f-time">' + (msg.elapsed_ms / 1000).toFixed(2) + 's total</span>';
+      tpHDot.className = 'tp-h-dot done';
+      tpHElapsed.className = 'tp-h-elapsed done';
+      tpHElapsed.textContent = '✓ done · ' + ((Date.now() - tStart) / 1000).toFixed(1) + 's';
+      finalFooter(msg);
     }
   }
 
+  function markConnectionLost() {
+    PHASES.forEach(function (ph) {
+      var icon = phaseIcon(ph);
+      if (icon && icon.classList.contains('loading')) {
+        setPhaseState(ph, 'error', '✕');
+        removeBar(ph);
+      }
+    });
+  }
+
   // ── Active syncs ──────────────────────────────────────────────────────────
-  var activeSyncs = {};  // courseId → EventSource  (refresh-button syncs)
+  var activeSyncs = {};
   var navSource   = null;
 
   // ── Refresh button ────────────────────────────────────────────────────────
@@ -473,11 +649,7 @@
         btn.classList.remove('loading');
         btn.innerHTML = SVG_REFRESH;
         btn.setAttribute('data-tip', 'Refresh data');
-        PHASES.forEach(function (ph) {
-          if (phaseRows[ph] && phaseRows[ph].classList.contains('tp-loading')) {
-            setPhase(ph, 'error', 'connection lost');
-          }
-        });
+        markConnectionLost();
       };
     });
   });
@@ -492,10 +664,7 @@
       var cid     = this.dataset.courseId;
       var name    = this.dataset.courseName;
 
-      if (activeSyncs[cid]) {
-        window.location.href = destUrl;
-        return;
-      }
+      if (activeSyncs[cid]) { window.location.href = destUrl; return; }
 
       if (navSource) { navSource.close(); navSource = null; }
 

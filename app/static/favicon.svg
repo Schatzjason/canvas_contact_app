@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <circle cx="16" cy="16" r="16" fill="#1a1a1a"/>
+  <text x="14" y="23" font-family="'Courier New', Courier, monospace" font-weight="700" font-size="18" fill="#f0ede8">T</text>
+  <text x="5" y="20" font-family="'Courier New', Courier, monospace" font-weight="700" font-size="18" fill="#ef4444">C</text>
+</svg>
