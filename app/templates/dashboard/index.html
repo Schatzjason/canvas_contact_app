@@ -237,7 +237,12 @@
     height: 100%;
     border-radius: 2px;
     background: #e67e22;
+    width: 5%;
+    transition: width 0.45s ease;
+  }
+  .tp-bar.indeterminate {
     width: 38%;
+    transition: none;
     animation: tp-slide 1.4s ease-in-out infinite;
   }
   @keyframes tp-slide {
@@ -246,10 +251,11 @@
   }
 
   /* Per-phase log lines */
-  .tp-phase-log { margin-left: 26px; display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
-  .tp-ll { font-size: 11px; color: #444; }
+  .tp-phase-log { margin-left: 26px; display: flex; flex-direction: column; gap: 2px; margin-top: 2px; max-height: 70px; overflow-y: auto; transition: max-height 0.35s ease, opacity 0.3s ease, margin-top 0.35s ease; }
+  .tp-ll { font-size: 11px; color: #444; line-height: 1.5; }
   .tp-ll.active { color: #aaa; }
   .tp-ll .tp-ll-hi { color: #e67e22; }
+  .tp-ll .tp-ll-ts { color: #3a3a3a; }
 
   /* Dividers between phases */
   .tp-divider { border: none; border-top: 1px solid #1e1e1e; margin: 0 0 0 26px; }
@@ -378,6 +384,7 @@
   var tpFooter   = document.getElementById('tp-footer');
 
   var phaseRows     = {};   // phase → .tp-phase element
+  var phaseTotal    = {};   // phase → known total (discussions only)
   var timerHnd      = null;
   var tStart        = null;
   var totalStudents = 0;    // from enrollments done_phase
@@ -395,6 +402,7 @@
     tpFooter.innerHTML = '';
     tpPhases.innerHTML = '';
     phaseRows = {};
+    phaseTotal = {};
     totalStudents = 0;
     runningEvents = 0;
     cachedPhases = [];
@@ -428,6 +436,13 @@
     timerHnd = null;
   }
 
+  function fmtElapsed() {
+    var secs = Math.floor((Date.now() - tStart) / 1000);
+    var m = Math.floor(secs / 60);
+    var s = secs % 60;
+    return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
   // ── Phase helpers ─────────────────────────────────────────────────────────
   function phaseIcon(ph) {
     var row = phaseRows[ph];
@@ -452,7 +467,7 @@
     if (!row || row.querySelector('.tp-bar-wrap')) return;
     var wrap = document.createElement('div');
     wrap.className = 'tp-bar-wrap';
-    wrap.innerHTML = '<div class="tp-bar"></div>';
+    wrap.innerHTML = '<div class="tp-bar indeterminate"></div>';
     row.appendChild(wrap);
   }
 
@@ -460,6 +475,14 @@
     var row = phaseRows[ph];
     var wrap = row && row.querySelector('.tp-bar-wrap');
     if (wrap) wrap.remove();
+  }
+
+  function setBarFill(ph, pct) {
+    var row = phaseRows[ph];
+    var bar = row && row.querySelector('.tp-bar');
+    if (!bar) return;
+    bar.classList.remove('indeterminate');
+    bar.style.width = Math.min(100, Math.max(0, pct)).toFixed(1) + '%';
   }
 
   function ensureLog(ph) {
@@ -484,6 +507,17 @@
       hd.appendChild(meta);
     }
     meta.innerHTML = html;
+  }
+
+  function collapseLog(ph) {
+    var log = phaseRows[ph] && phaseRows[ph].querySelector('.tp-phase-log');
+    if (!log || !log.children.length) return;
+    log.style.maxHeight = log.scrollHeight + 'px';
+    log.style.overflowY = 'hidden';
+    void log.offsetHeight; // force reflow so transition fires from concrete value
+    log.style.maxHeight = '0';
+    log.style.opacity = '0';
+    log.style.marginTop = '0';
   }
 
   function addLogLine(ph, html, isActive) {
@@ -540,11 +574,21 @@
     } else if (msg.status === 'page') {
       setPhaseState(ph, 'loading', '▶');
       if (ph === 'discussions') {
+        if (msg.total) phaseTotal[ph] = msg.total;
+        if (phaseTotal[ph]) setBarFill(ph, msg.n / phaseTotal[ph] * 100);
         var title = msg.topic ? msg.topic.substring(0, 40) : '';
         addLogLine(ph,
           'topic ' + msg.n + (title ? ' — <span class="tp-ll-hi">' + title + '</span>' : '') +
           ' <span class="tp-ll-hi">fetching…</span>',
           true);
+        var discLog = phaseRows[ph] && phaseRows[ph].querySelector('.tp-phase-log');
+        if (discLog) discLog.scrollTop = discLog.scrollHeight;
+      } else if (ph === 'conversations' || ph === 'student_messages') {
+        var ts = '<span class="tp-ll-ts">' + fmtElapsed() + '</span>';
+        var cnt = typeof msg.count === 'number' ? msg.count : 0;
+        addLogLine(ph, ts + ' page ' + msg.n + ' — <span class="tp-ll-hi">' + cnt + ' messages</span>', true);
+        var log = phaseRows[ph] && phaseRows[ph].querySelector('.tp-phase-log');
+        if (log) log.scrollTop = log.scrollHeight;
       } else {
         addLogLine(ph, 'page ' + msg.n, true);
       }
@@ -566,7 +610,9 @@
         countStr = msg.count + ' events matched';
       }
       setMeta(ph, '<span class="tp-count done">' + countStr + '</span><span class="tp-ms">· ' + t + '</span>');
+      setBarFill(ph, 100);
       updateFooter();
+      setTimeout(function () { collapseLog(ph); }, 400);
 
     } else if (msg.status === 'error') {
       setPhaseState(ph, 'error', '✕');
@@ -678,7 +724,7 @@
         if (msg.status === 'done') {
           src.close();
           navSource = null;
-          window.location.href = destUrl;
+          setTimeout(function () { window.location.href = destUrl; }, 500);
         }
       };
 

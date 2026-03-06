@@ -142,7 +142,7 @@ def sync_course(course_id):
             else:
                 fetched_live = True
                 page_n += 1
-                yield {'status': 'page', 'phase': phase, 'n': page_n}
+                yield {'status': 'page', 'phase': phase, 'n': page_n, 'count': len(page)}
         if fetched_live:
             _set_sync_marker(course_id, 'conv_sent')
         for conv in conversations:
@@ -183,7 +183,7 @@ def sync_course(course_id):
             else:
                 fetched_live = True
                 page_n += 1
-                yield {'status': 'page', 'phase': phase, 'n': page_n}
+                yield {'status': 'page', 'phase': phase, 'n': page_n, 'count': len(page)}
         if fetched_live:
             _set_sync_marker(course_id, 'conv_inbox')
         for conv in inbox:
@@ -214,7 +214,7 @@ def sync_course(course_id):
     try:
         topics = client.get_discussion_topics(course_id)
         for i, topic in enumerate(topics, 1):
-            yield {'status': 'page', 'phase': phase, 'n': i, 'topic': topic.get('title', '')}
+            yield {'status': 'page', 'phase': phase, 'n': i, 'total': len(topics), 'topic': topic.get('title', '')}
             entries = client.get_discussion_entries(course_id, topic['id'])
             for entry in entries:
                 entry_at = datetime.fromisoformat(entry['created_at'])
