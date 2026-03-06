@@ -197,6 +197,26 @@ class CanvasClient:
             )
             resp.raise_for_status()
             page = resp.json()
+
+            # Canvas doesn't reliably honour start_time, so enforce the cutoff
+            # client-side. Conversations arrive newest-first by last_message_at,
+            # so the first entry older than `since` means we're done.
+            if since is not None and page:
+                cutoff_page = []
+                hit_cutoff = False
+                for conv in page:
+                    ts_str = conv.get('last_message_at')
+                    if ts_str and datetime.fromisoformat(ts_str) < since:
+                        hit_cutoff = True
+                        break
+                    cutoff_page.append(conv)
+                page = cutoff_page
+                if hit_cutoff:
+                    results.extend(page)
+                    if page:
+                        yield page, False
+                    break
+
             results.extend(page)
             yield page, False
             next_url = self._parse_next_url(resp.headers.get('Link'))
