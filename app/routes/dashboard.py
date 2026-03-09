@@ -1,9 +1,11 @@
 import json
 import re
 from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask import Blueprint, Response, current_app, flash, render_template, stream_with_context
 from sqlalchemy import func, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from flask import redirect, request, url_for
 
@@ -17,6 +19,15 @@ from app.services.sync import run_sync, sync_course
 bp = Blueprint('dashboard', __name__)
 
 PINNED_DISCUSSION_TOPIC_ID = 1461939
+
+
+def _get_tz():
+    """Return the user's local timezone from the browser-set cookie, falling back to UTC."""
+    tz_name = request.cookies.get('tz', '')
+    try:
+        return ZoneInfo(tz_name) if tz_name else timezone.utc
+    except ZoneInfoNotFoundError:
+        return timezone.utc
 
 
 def _strip_html(html):
@@ -175,17 +186,18 @@ def course(course_id):
         flash(f'Could not load enrollments: {exc}')
         enrollments = []
 
-    today = datetime.now(timezone.utc).date()
+    tz = _get_tz()
+    today = datetime.now(tz).date()
     # 21 columns: today-20 (oldest) through today (newest)
     days = [today - timedelta(days=i) for i in range(20, -1, -1)]
-    window_start_dt = datetime.combine(days[0], time.min, tzinfo=timezone.utc)
+    window_start_dt = datetime.combine(days[0], time.min, tzinfo=tz)
 
     warn_days = current_app.config['STALE_WARN_DAYS']
     alert_days = current_app.config['STALE_ALERT_DAYS']
 
     # Last interaction date per student (all time, not just the window)
     last_by_student = {
-        row.student_canvas_id: row.last_at.date()
+        row.student_canvas_id: row.last_at.astimezone(tz).date()
         for row in db.session.query(
             InteractionEvent.student_canvas_id,
             func.max(InteractionEvent.occurred_at).label('last_at'),
@@ -204,7 +216,7 @@ def course(course_id):
         InteractionEvent.occurred_at >= window_start_dt,
     ).all():
         sid = event.student_canvas_id
-        day = event.occurred_at.date()
+        day = event.occurred_at.astimezone(tz).date()
         active_days_by_student.setdefault(sid, {}).setdefault(day, set()).add(event.event_type)
         if event.event_type in ('discussion_entry', 'discussion_reply'):
             disc_source_ids.setdefault((sid, day), []).append(event.source_id)
@@ -329,9 +341,10 @@ def student(course_id, student_id):
     else:
         student_name = f'Student {student_id}'
 
-    today = datetime.now(timezone.utc).date()
+    tz = _get_tz()
+    today = datetime.now(tz).date()
     days = [today - timedelta(days=i) for i in range(20, -1, -1)]
-    window_start_dt = datetime.combine(days[0], time.min, tzinfo=timezone.utc)
+    window_start_dt = datetime.combine(days[0], time.min, tzinfo=tz)
 
     active_days = {}
     event_source_ids = {}  # {(day, event_type): [source_id, ...]}
@@ -340,7 +353,7 @@ def student(course_id, student_id):
         InteractionEvent.student_canvas_id == student_id,
         InteractionEvent.occurred_at >= window_start_dt,
     ).all():
-        day = event.occurred_at.date()
+        day = event.occurred_at.astimezone(tz).date()
         active_days.setdefault(day, set()).add(event.event_type)
         event_source_ids.setdefault((day, event.event_type), []).append(event.source_id)
 
@@ -537,13 +550,18 @@ def compose(course_id, student_id):
                 # Record the event directly — no re-fetch needed
                 ts_str      = new_conv.get('last_authored_at') or new_conv.get('last_message_at')
                 occurred_at = datetime.fromisoformat(ts_str) if ts_str else now
-                db.session.add(InteractionEvent(
-                    course_id=course_id,
-                    student_canvas_id=student_id,
-                    event_type='conversation',
-                    occurred_at=occurred_at,
-                    source_id=new_conv['id'],
-                ))
+                stmt = pg_insert(InteractionEvent.__table__).values([{
+                    'course_id': course_id,
+                    'student_canvas_id': student_id,
+                    'event_type': 'conversation',
+                    'occurred_at': occurred_at,
+                    'source_id': new_conv['id'],
+                }])
+                stmt = stmt.on_conflict_do_update(
+                    constraint='uq_interaction_event_type_source_student',
+                    set_={'occurred_at': stmt.excluded.occurred_at},
+                )
+                db.session.execute(stmt)
 
                 # Prepend new conversation to the sent cache so syncs stay fast
                 sent_key   = CanvasClient._make_cache_key('/api/v1/conversations', {'scope': 'sent'})
