@@ -565,6 +565,64 @@ def test_sync_conversation_error_does_not_abort_discussions():
     assert InteractionEvent.query.count() == 1
 
 
+def test_sync_parallel_phases_all_contribute_events():
+    """Events from conversations, discussions, and submissions are all saved in one sync."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        conversations=[{
+            'id': 1001,
+            'last_authored_at': _days_ago(2),
+            'participants': [{'id': STUDENT_A}],
+        }],
+        inbox=[{
+            'id': 2001,
+            'last_message_at': _days_ago(1),
+            'participants': [{'id': STUDENT_A}],
+        }],
+        topics=[{'id': 201}],
+        entries_by_topic={201: [
+            {'id': 301, 'user_id': STUDENT_A, 'created_at': _days_ago(3), 'recent_replies': []},
+        ]},
+        assignments=[{'id': 501, 'name': 'HW 1'}],
+        submissions_by_assignment={501: [{
+            'id': 601,
+            'user_id': STUDENT_A,
+            'submitted_at': _days_ago(4),
+            'workflow_state': 'submitted',
+        }]},
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        msgs = _run()
+
+    done = next(m for m in msgs if m['status'] == 'done')
+    assert done['count'] == 4
+    types = {e.event_type for e in InteractionEvent.query.all()}
+    assert types == {'conversation', 'student_message', 'discussion_entry', 'submission'}
+
+
+def test_sync_parallel_phase_failure_does_not_block_others():
+    """When discussions and submissions both fail, conversations still saves its events."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        conversations=[{
+            'id': 1001,
+            'last_authored_at': _days_ago(2),
+            'participants': [{'id': STUDENT_A}],
+        }],
+    )
+    client.get_discussion_topics.side_effect = RuntimeError('disc API down')
+    client.get_assignments.side_effect = RuntimeError('assignments API down')
+
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        msgs = _run()
+
+    error_phases = {m['phase'] for m in msgs if m['status'] == 'error'}
+    assert 'discussions' in error_phases
+    assert 'submissions' in error_phases
+    # Conversation event was still saved
+    assert InteractionEvent.query.filter_by(event_type='conversation').count() == 1
+
+
 def test_sync_enrollment_error_aborts():
     """An enrollment failure must stop the generator — no subsequent phases run."""
     mock = MagicMock()
