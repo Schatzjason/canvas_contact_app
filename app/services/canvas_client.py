@@ -13,6 +13,8 @@ from app.models.canvas_cache import CanvasCache
 TTL_CONVERSATIONS = 30 * 60
 TTL_DISCUSSION_ENTRIES = 30 * 60
 TTL_ENROLLMENTS = 24 * 60 * 60
+TTL_ASSIGNMENTS = 60 * 60
+TTL_SUBMISSIONS = 30 * 60
 
 
 class CanvasClient:
@@ -241,6 +243,21 @@ class CanvasClient:
         )
         resp.raise_for_status()
         return resp.json()
+
+    def get_assignments(self, course_id):
+        """All assignments for a course (cached 60 min)."""
+        return self._get_all_pages(
+            f'/api/v1/courses/{course_id}/assignments',
+            params={'order_by': 'due_at'},
+            ttl=TTL_ASSIGNMENTS,
+        )
+
+    def get_submissions(self, course_id, assignment_id):
+        """All submissions for an assignment (cached 30 min)."""
+        return self._get_all_pages(
+            f'/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions',
+            ttl=TTL_SUBMISSIONS,
+        )
 
     def get_discussion_topics(self, course_id):
         """All discussion topics for a course (cached 15 min)."""

@@ -255,6 +255,48 @@ def sync_course(course_id):
     yield {'status': 'done_phase', 'phase': phase, 'count': disc_matched,
            'elapsed_ms': int((time.perf_counter() - t0) * 1000)}
 
+    # ── Phase: submissions ────────────────────────────────────────────────────
+    phase = 'submissions'
+    yield {'status': 'start', 'phase': phase}
+    t0 = time.perf_counter()
+    sub_matched = 0
+    try:
+        all_assignments = client.get_assignments(course_id)
+        # Skip discussion-based and quiz assignments — those are tracked separately
+        skip_types = {'discussion_topic', 'online_quiz'}
+        assignments = [
+            a for a in all_assignments
+            if not skip_types.intersection(a.get('submission_types', []))
+        ]
+        for i, assignment in enumerate(assignments, 1):
+            yield {'status': 'page', 'phase': phase, 'n': i,
+                   'total': len(assignments),
+                   'assignment': assignment.get('name', '')}
+            submissions = client.get_submissions(course_id, assignment['id'])
+            for sub in submissions:
+                if sub.get('workflow_state') in ('unsubmitted', None):
+                    continue
+                submitted_at = sub.get('submitted_at')
+                if not submitted_at:
+                    continue
+                sub_at = datetime.fromisoformat(submitted_at)
+                if sub_at < cutoff:
+                    continue
+                if sub.get('user_id') not in student_ids:
+                    continue
+                events.append({
+                    'course_id': course_id,
+                    'student_canvas_id': sub['user_id'],
+                    'event_type': 'submission',
+                    'occurred_at': sub_at,
+                    'source_id': sub['id'],
+                })
+                sub_matched += 1
+    except Exception as exc:
+        yield {'status': 'error', 'phase': phase, 'msg': str(exc)}
+    yield {'status': 'done_phase', 'phase': phase, 'count': sub_matched,
+           'elapsed_ms': int((time.perf_counter() - t0) * 1000)}
+
     # ── Phase: saving ────────────────────────────────────────────────────────
     phase = 'saving'
     yield {'status': 'start', 'phase': phase}

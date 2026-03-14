@@ -7,7 +7,7 @@ class InteractionEvent(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     course_id = db.Column(db.BigInteger, nullable=False, index=True)
     student_canvas_id = db.Column(db.BigInteger, nullable=False, index=True)
-    # 'conversation' | 'discussion_entry' | 'discussion_reply'
+    # 'conversation' | 'discussion_entry' | 'discussion_reply' | 'submission'
     event_type = db.Column(db.String(32), nullable=False)
     occurred_at = db.Column(db.DateTime(timezone=True), nullable=False)
     # Canvas object ID — combined with event_type to deduplicate on upsert

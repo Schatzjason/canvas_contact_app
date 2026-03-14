@@ -25,12 +25,15 @@ INSTRUCTOR_ID = 500
 
 
 def _make_client(enrollments=None, conversations=None, inbox=None,
-                 topics=None, entries_by_topic=None, instructor_id=INSTRUCTOR_ID):
+                 topics=None, entries_by_topic=None, instructor_id=INSTRUCTOR_ID,
+                 assignments=None, submissions_by_assignment=None):
     """Return a mock CanvasClient that yields controlled fixture data.
 
     conversations: sent (instructor) conversations (scope='sent')
     inbox:         received conversations (scope='inbox') for student messages
     instructor_id: Canvas user ID returned by get_current_user
+    assignments:   list of assignment dicts (each needs at least 'id')
+    submissions_by_assignment: {assignment_id: [submission_dicts]}
     """
     mock = MagicMock()
     mock.get_enrollments.return_value = enrollments or []
@@ -50,6 +53,13 @@ def _make_client(enrollments=None, conversations=None, inbox=None,
     by_topic = entries_by_topic or {}
     mock.get_discussion_entries.side_effect = (
         lambda course_id, topic_id: by_topic.get(topic_id, [])
+    )
+
+    mock.get_assignments.return_value = assignments or []
+
+    by_assignment = submissions_by_assignment or {}
+    mock.get_submissions.side_effect = (
+        lambda course_id, assignment_id: by_assignment.get(assignment_id, [])
     )
     return mock
 
@@ -488,14 +498,14 @@ def test_sync_falls_back_to_cutoff_when_no_marker():
 # New progress message shapes
 # ---------------------------------------------------------------------------
 
-def test_sync_yields_done_phase_for_all_five_phases():
-    """sync_course must emit a done_phase for each of the 5 named phases."""
+def test_sync_yields_done_phase_for_all_six_phases():
+    """sync_course must emit a done_phase for each of the 6 named phases."""
     client = _make_client(enrollments=[{'user_id': STUDENT_A}])
     with patch('app.services.sync.CanvasClient', return_value=client):
         msgs = _run()
 
     done_phases = {m['phase'] for m in msgs if m['status'] == 'done_phase'}
-    assert done_phases == {'enrollments', 'conversations', 'student_messages', 'discussions', 'saving'}
+    assert done_phases == {'enrollments', 'conversations', 'student_messages', 'discussions', 'submissions', 'saving'}
 
 
 def test_sync_done_message_has_students_count():
@@ -581,3 +591,223 @@ def test_sync_enrollment_cached_emits_cached_message():
         msgs = _run()
 
     assert any(m['status'] == 'cached' and m['phase'] == 'enrollments' for m in msgs)
+
+
+# ---------------------------------------------------------------------------
+# Submissions
+# ---------------------------------------------------------------------------
+
+def test_sync_creates_submission_event():
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        assignments=[{'id': 501, 'name': 'HW 1'}],
+        submissions_by_assignment={501: [{
+            'id': 601,
+            'user_id': STUDENT_A,
+            'submitted_at': _days_ago(2),
+            'workflow_state': 'submitted',
+        }]},
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    events = InteractionEvent.query.filter_by(event_type='submission').all()
+    assert len(events) == 1
+    assert events[0].student_canvas_id == STUDENT_A
+    assert events[0].source_id == 601
+
+
+def test_sync_submission_skips_discussion_assignments():
+    """Assignments with submission_types containing 'discussion_topic' are skipped."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        assignments=[
+            {'id': 501, 'name': 'Discussion Board', 'submission_types': ['discussion_topic']},
+            {'id': 502, 'name': 'HW 1', 'submission_types': ['online_upload']},
+        ],
+        submissions_by_assignment={
+            501: [{'id': 601, 'user_id': STUDENT_A, 'submitted_at': _days_ago(2), 'workflow_state': 'submitted'}],
+            502: [{'id': 602, 'user_id': STUDENT_A, 'submitted_at': _days_ago(2), 'workflow_state': 'submitted'}],
+        },
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    events = InteractionEvent.query.filter_by(event_type='submission').all()
+    assert len(events) == 1
+    assert events[0].source_id == 602
+    # get_submissions should only have been called for the non-discussion assignment
+    client.get_submissions.assert_called_once_with(COURSE_ID, 502)
+
+
+def test_sync_submission_skips_quiz_assignments():
+    """Assignments with submission_types containing 'online_quiz' are skipped."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        assignments=[
+            {'id': 501, 'name': 'Midterm Quiz', 'submission_types': ['online_quiz']},
+        ],
+        submissions_by_assignment={
+            501: [{'id': 601, 'user_id': STUDENT_A, 'submitted_at': _days_ago(2), 'workflow_state': 'submitted'}],
+        },
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    assert InteractionEvent.query.filter_by(event_type='submission').count() == 0
+    client.get_submissions.assert_not_called()
+
+
+def test_sync_submission_ignores_non_enrolled():
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        assignments=[{'id': 501, 'name': 'HW 1'}],
+        submissions_by_assignment={501: [{
+            'id': 601,
+            'user_id': 999,
+            'submitted_at': _days_ago(2),
+            'workflow_state': 'submitted',
+        }]},
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    assert InteractionEvent.query.filter_by(event_type='submission').count() == 0
+
+
+def test_sync_submission_excludes_old():
+    """Submissions older than 21 days are not recorded."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        assignments=[{'id': 501, 'name': 'HW 1'}],
+        submissions_by_assignment={501: [{
+            'id': 601,
+            'user_id': STUDENT_A,
+            'submitted_at': _days_ago(25),
+            'workflow_state': 'submitted',
+        }]},
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    assert InteractionEvent.query.filter_by(event_type='submission').count() == 0
+
+
+def test_sync_submission_skips_unsubmitted():
+    """Submissions with workflow_state='unsubmitted' are skipped."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        assignments=[{'id': 501, 'name': 'HW 1'}],
+        submissions_by_assignment={501: [{
+            'id': 601,
+            'user_id': STUDENT_A,
+            'submitted_at': None,
+            'workflow_state': 'unsubmitted',
+        }]},
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    assert InteractionEvent.query.filter_by(event_type='submission').count() == 0
+
+
+def test_sync_submission_skips_no_submitted_at():
+    """Submissions without a submitted_at timestamp are skipped."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        assignments=[{'id': 501, 'name': 'HW 1'}],
+        submissions_by_assignment={501: [{
+            'id': 601,
+            'user_id': STUDENT_A,
+            'submitted_at': None,
+            'workflow_state': 'graded',
+        }]},
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    assert InteractionEvent.query.filter_by(event_type='submission').count() == 0
+
+
+def test_sync_submission_accepts_graded():
+    """Submissions with workflow_state='graded' should be included."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        assignments=[{'id': 501, 'name': 'HW 1'}],
+        submissions_by_assignment={501: [{
+            'id': 601,
+            'user_id': STUDENT_A,
+            'submitted_at': _days_ago(3),
+            'workflow_state': 'graded',
+        }]},
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    events = InteractionEvent.query.filter_by(event_type='submission').all()
+    assert len(events) == 1
+
+
+def test_sync_submission_multiple_assignments():
+    """Submissions across multiple assignments all get recorded."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}, {'user_id': STUDENT_B}],
+        assignments=[{'id': 501, 'name': 'HW 1'}, {'id': 502, 'name': 'HW 2'}],
+        submissions_by_assignment={
+            501: [
+                {'id': 601, 'user_id': STUDENT_A, 'submitted_at': _days_ago(5), 'workflow_state': 'submitted'},
+                {'id': 602, 'user_id': STUDENT_B, 'submitted_at': _days_ago(4), 'workflow_state': 'graded'},
+            ],
+            502: [
+                {'id': 603, 'user_id': STUDENT_A, 'submitted_at': _days_ago(1), 'workflow_state': 'submitted'},
+            ],
+        },
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    events = InteractionEvent.query.filter_by(event_type='submission').all()
+    assert len(events) == 3
+
+
+def test_sync_submission_error_does_not_abort_saving():
+    """A failure in the submissions phase must not prevent saving from running."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        conversations=[{
+            'id': 1001,
+            'last_authored_at': _days_ago(2),
+            'participants': [{'id': STUDENT_A}],
+        }],
+    )
+    client.get_assignments.side_effect = RuntimeError('assignments API down')
+
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        msgs = _run()
+
+    phases_with_errors = {m['phase'] for m in msgs if m['status'] == 'error'}
+    assert 'submissions' in phases_with_errors
+    # The conversation event should still have been saved
+    assert InteractionEvent.query.filter_by(event_type='conversation').count() == 1
+
+
+def test_sync_submission_upsert_is_idempotent():
+    """Running sync twice with identical submission data produces the same row count."""
+    kwargs = dict(
+        enrollments=[{'user_id': STUDENT_A}],
+        assignments=[{'id': 501, 'name': 'HW 1'}],
+        submissions_by_assignment={501: [{
+            'id': 601,
+            'user_id': STUDENT_A,
+            'submitted_at': _days_ago(2),
+            'workflow_state': 'submitted',
+        }]},
+    )
+    with patch('app.services.sync.CanvasClient', return_value=_make_client(**kwargs)):
+        _run()
+    first_count = InteractionEvent.query.filter_by(event_type='submission').count()
+
+    with patch('app.services.sync.CanvasClient', return_value=_make_client(**kwargs)):
+        _run()
+
+    assert InteractionEvent.query.filter_by(event_type='submission').count() == first_count

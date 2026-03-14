@@ -353,12 +353,13 @@
   var SVG_REFRESH = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5"/><path d="M13.5 2.5v3h-3"/></svg>';
   var SVG_CHECK   = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 8 6 12 14 4"/></svg>';
 
-  var PHASES = ['enrollments', 'conversations', 'student_messages', 'discussions', 'saving'];
+  var PHASES = ['enrollments', 'conversations', 'student_messages', 'discussions', 'submissions', 'saving'];
   var PHASE_LABEL = {
     enrollments:      'Enrollments',
     conversations:    'Msgs from instructor',
     student_messages: 'Msgs from student',
     discussions:      'Discussion topics',
+    submissions:      'Homework submissions',
     saving:           'Save to database',
   };
 
@@ -583,6 +584,16 @@
           true);
         var discLog = phaseRows[ph] && phaseRows[ph].querySelector('.tp-phase-log');
         if (discLog) discLog.scrollTop = discLog.scrollHeight;
+      } else if (ph === 'submissions') {
+        if (msg.total) phaseTotal[ph] = msg.total;
+        if (phaseTotal[ph]) setBarFill(ph, msg.n / phaseTotal[ph] * 100);
+        var aTitle = msg.assignment ? msg.assignment.substring(0, 40) : '';
+        addLogLine(ph,
+          'assignment ' + msg.n + (aTitle ? ' — <span class="tp-ll-hi">' + aTitle + '</span>' : '') +
+          ' <span class="tp-ll-hi">fetching…</span>',
+          true);
+        var subLog = phaseRows[ph] && phaseRows[ph].querySelector('.tp-phase-log');
+        if (subLog) subLog.scrollTop = subLog.scrollHeight;
       } else if (ph === 'conversations' || ph === 'student_messages') {
         var ts = '<span class="tp-ll-ts">' + fmtElapsed() + '</span>';
         var cnt = typeof msg.count === 'number' ? msg.count : 0;
