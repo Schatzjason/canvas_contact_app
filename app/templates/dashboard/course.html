@@ -69,7 +69,61 @@
     margin-bottom: 6px;
   }
 
-  h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 14px; }
+  h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+
+  .edit-name-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: none;
+    background: none;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    border-radius: 4px;
+    padding: 0;
+    flex-shrink: 0;
+    transition: color 0.15s ease, background 0.15s ease;
+  }
+  .edit-name-btn:hover { color: var(--text-primary); background: var(--border); }
+  .edit-name-btn svg { width: 14px; height: 14px; }
+
+  .name-edit-form {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+  }
+  .name-edit-form.active { display: flex; }
+  .name-edit-input {
+    font-family: var(--sans);
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    padding: 2px 8px;
+    color: var(--text-primary);
+    background: var(--surface);
+    flex: 1;
+    min-width: 0;
+  }
+  .name-edit-input:focus { outline: none; border-color: var(--text-secondary); }
+  .name-edit-save, .name-edit-cancel {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid var(--border-strong);
+    transition: all 0.12s ease;
+    white-space: nowrap;
+  }
+  .name-edit-save { background: var(--text-primary); color: var(--surface); border-color: var(--text-primary); }
+  .name-edit-save:hover { opacity: 0.85; }
+  .name-edit-cancel { background: var(--surface); color: var(--text-secondary); }
+  .name-edit-cancel:hover { background: var(--border); color: var(--text-primary); }
 
   .toolbar { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
 
@@ -266,7 +320,19 @@
 <div class="page">
 <div class="page-header">
   <div class="course-label">{{ course.course_code }}</div>
-  <h1>{{ course.name }}</h1>
+  <h1>
+    <span id="display-name-text">{{ display_name }}</span>
+    <button class="edit-name-btn" id="edit-name-btn" type="button" title="Edit display name">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M11.5 1.5l3 3L5 14H2v-3L11.5 1.5z"/>
+      </svg>
+    </button>
+    <div class="name-edit-form" id="name-edit-form">
+      <input class="name-edit-input" id="name-edit-input" type="text" value="{{ display_name | e }}">
+      <button class="name-edit-save" id="name-edit-save" type="button">Save</button>
+      <button class="name-edit-cancel" id="name-edit-cancel" type="button">Cancel</button>
+    </div>
+  </h1>
   <div class="toolbar">
     <form method="post" action="{{ url_for('dashboard.flush_cache', course_id=course.id) }}" style="margin:0">
       <button class="flush-btn" type="submit">
@@ -429,6 +495,58 @@
 
   popup.addEventListener('mouseenter', () => clearTimeout(hideTimer));
   popup.addEventListener('mouseleave', hide);
+})();
+
+(function () {
+  var nameText   = document.getElementById('display-name-text');
+  var editBtn    = document.getElementById('edit-name-btn');
+  var editForm   = document.getElementById('name-edit-form');
+  var editInput  = document.getElementById('name-edit-input');
+  var saveBtn    = document.getElementById('name-edit-save');
+  var cancelBtn  = document.getElementById('name-edit-cancel');
+  var saveUrl    = {{ url_for('dashboard.save_display_name', course_id=course.id) | tojson }};
+
+  function startEdit() {
+    editInput.value = nameText.textContent;
+    nameText.style.display = 'none';
+    editBtn.style.display = 'none';
+    editForm.classList.add('active');
+    editInput.focus();
+    editInput.select();
+  }
+
+  function cancelEdit() {
+    editForm.classList.remove('active');
+    nameText.style.display = '';
+    editBtn.style.display = '';
+  }
+
+  function saveEdit() {
+    var newName = editInput.value.trim();
+    if (!newName) return;
+    saveBtn.disabled = true;
+    fetch(saveUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newName }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.ok) {
+          nameText.textContent = data.name;
+          cancelEdit();
+        }
+      })
+      .finally(function () { saveBtn.disabled = false; });
+  }
+
+  editBtn.addEventListener('click', startEdit);
+  cancelBtn.addEventListener('click', cancelEdit);
+  saveBtn.addEventListener('click', saveEdit);
+  editInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); saveEdit(); }
+    if (e.key === 'Escape') cancelEdit();
+  });
 })();
 </script>
 {% endblock %}

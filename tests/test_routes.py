@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 from app import db
 from app.models.canvas_cache import CanvasCache
+from app.models.course_display_name import CourseDisplayName
 from app.models.interaction_event import InteractionEvent
 from app.models.student_note import StudentNote
 
@@ -345,6 +346,75 @@ def test_compose_post_creates_sent_cache_when_missing(client):
     entry = CanvasCache.query.filter_by(cache_key=sent_key).first()
     assert entry is not None
     assert entry.response_json[0]['id'] == 9999
+
+
+# ---------------------------------------------------------------------------
+# flush-cache
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Display name
+# ---------------------------------------------------------------------------
+
+def test_save_display_name_creates_row(client):
+    response = client.post(
+        f'/course/{COURSE_ID}/display-name',
+        data=_json.dumps({'name': 'My Custom Name'}),
+        content_type='application/json',
+    )
+    assert response.status_code == 200
+    row = CourseDisplayName.query.filter_by(course_id=COURSE_ID).first()
+    assert row is not None
+    assert row.name == 'My Custom Name'
+
+
+def test_save_display_name_updates_existing(client):
+    for name in ('First Name', 'Updated Name'):
+        client.post(
+            f'/course/{COURSE_ID}/display-name',
+            data=_json.dumps({'name': name}),
+            content_type='application/json',
+        )
+    assert CourseDisplayName.query.count() == 1
+    assert CourseDisplayName.query.first().name == 'Updated Name'
+
+
+def test_save_display_name_rejects_empty(client):
+    response = client.post(
+        f'/course/{COURSE_ID}/display-name',
+        data=_json.dumps({'name': '  '}),
+        content_type='application/json',
+    )
+    assert response.status_code == 400
+
+
+def test_course_page_shows_custom_display_name(client):
+    db.session.add(CourseDisplayName(course_id=COURSE_ID, name='My Renamed Course'))
+    db.session.commit()
+    with patch('app.routes.dashboard.run_sync', return_value=0), \
+         patch('app.routes.dashboard.CanvasClient', return_value=_mock_client()):
+        response = client.get(f'/course/{COURSE_ID}')
+    assert b'My Renamed Course' in response.data
+
+
+def test_course_page_falls_back_to_canvas_name(client):
+    """Without a custom display name, the Canvas course name is shown."""
+    with patch('app.routes.dashboard.run_sync', return_value=0), \
+         patch('app.routes.dashboard.CanvasClient', return_value=_mock_client()):
+        response = client.get(f'/course/{COURSE_ID}')
+    assert b'Test Course' in response.data
+
+
+def test_index_shows_custom_display_name(client):
+    db.session.add(CourseDisplayName(course_id=COURSE_ID, name='Index Custom Name'))
+    db.session.commit()
+    with patch('app.routes.dashboard.CanvasClient') as MockClient:
+        MockClient.return_value.get_courses.return_value = [
+            {'id': COURSE_ID, 'name': 'Intro to Python', 'course_code': 'CS101', 'term': None},
+        ]
+        response = client.get('/')
+    html = response.data.decode()
+    assert 'class="card-title">Index Custom Name<' in html
 
 
 # ---------------------------------------------------------------------------

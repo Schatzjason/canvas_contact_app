@@ -302,7 +302,7 @@
          data-course-name="{{ course.name }}"
          data-stats-url="{{ url_for('dashboard.course_stats', course_id=course.id) }}">
         <div class="card-main">
-          <div class="card-title">{{ course.name }}</div>
+          <div class="card-title">{{ display_names.get(course.id, course.name) }}</div>
           <div class="card-subtitle">{{ course.course_code }}{% if course.term %} · {{ course.term.name }}{% endif %}</div>
         </div>
         <div class="card-stats">

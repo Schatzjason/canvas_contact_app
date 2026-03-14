@@ -11,6 +11,7 @@ from flask import redirect, request, url_for
 
 from app import db
 from app.models.canvas_cache import CanvasCache
+from app.models.course_display_name import CourseDisplayName
 from app.models.interaction_event import InteractionEvent
 from app.models.student_note import StudentNote
 from app.services.canvas_client import CanvasClient, TTL_CONVERSATIONS
@@ -112,9 +113,17 @@ def index():
     else:
         stats_by_course = {}
 
+    display_names = {
+        row.course_id: row.name
+        for row in CourseDisplayName.query.filter(
+            CourseDisplayName.course_id.in_(course_ids)
+        ).all()
+    } if course_ids else {}
+
     return render_template('dashboard/index.html',
         courses=courses,
         stats_by_course=stats_by_course,
+        display_names=display_names,
     )
 
 
@@ -143,6 +152,22 @@ def flush_cache(course_id):
     db.session.commit()
     flash(f'Cache cleared ({deleted} entries). Reload a course to re-sync.')
     return redirect(url_for('dashboard.index'))
+
+
+@bp.route('/course/<int:course_id>/display-name', methods=['POST'])
+def save_display_name(course_id):
+    name = request.get_json(force=True).get('name', '').strip()
+    if not name:
+        return {'ok': False, 'error': 'Name cannot be empty'}, 400
+    row = CourseDisplayName.query.filter_by(course_id=course_id).first()
+    if row:
+        row.name = name
+        row.updated_at = datetime.now(timezone.utc)
+    else:
+        row = CourseDisplayName(course_id=course_id, name=name)
+        db.session.add(row)
+    db.session.commit()
+    return {'ok': True, 'name': name}
 
 
 @bp.route('/course/<int:course_id>/sync')
@@ -306,8 +331,12 @@ def course(course_id):
     # No interaction ever → first; then ascending by last interaction date
     students.sort(key=lambda s: (s['last_date'] is not None, s['last_date'] or date.min))
 
+    display_name_row = CourseDisplayName.query.filter_by(course_id=course_id).first()
+    display_name = display_name_row.name if display_name_row else course_obj.get('name', '')
+
     return render_template('dashboard/course.html',
         course=course_obj,
+        display_name=display_name,
         students=students,
         days=days,
         today=today,
