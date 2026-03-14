@@ -447,6 +447,14 @@ def test_sync_marker_written_after_live_fetch():
     assert marker is not None
 
 
+def _find_sent_call(mock):
+    """Find the stream_conversations call for scope='sent' (the default)."""
+    for call in mock.stream_conversations.call_args_list:
+        if call.kwargs.get('scope', 'sent') == 'sent':
+            return call
+    raise AssertionError('No sent-scope stream_conversations call found')
+
+
 def test_sync_uses_marker_as_since():
     """When a sync marker exists, stream_conversations receives it as `since`
     rather than the 21-day fallback cutoff."""
@@ -464,11 +472,12 @@ def test_sync_uses_marker_as_since():
     mock.get_current_user.return_value = {'id': INSTRUCTOR_ID}
     mock.stream_conversations.side_effect = lambda since=None, scope='sent': iter([])
     mock.get_discussion_topics.return_value = []
+    mock.get_assignments.return_value = []
 
     with patch('app.services.sync.CanvasClient', return_value=mock):
         _run()
 
-    sent_call = mock.stream_conversations.call_args_list[0]
+    sent_call = _find_sent_call(mock)
     since_used = sent_call.kwargs['since']
     # Marker was 6 hours ago; 21-day cutoff would be ~21 days ago.
     # Verify the marker (not the cutoff) was used.
@@ -482,11 +491,12 @@ def test_sync_falls_back_to_cutoff_when_no_marker():
     mock.get_current_user.return_value = {'id': INSTRUCTOR_ID}
     mock.stream_conversations.side_effect = lambda since=None, scope='sent': iter([])
     mock.get_discussion_topics.return_value = []
+    mock.get_assignments.return_value = []
 
     with patch('app.services.sync.CanvasClient', return_value=mock):
         _run()
 
-    sent_call = mock.stream_conversations.call_args_list[0]
+    sent_call = _find_sent_call(mock)
     since_used = sent_call.kwargs['since']
     # Cutoff is midnight(today) - 21 days, so age is between 21 and 22 days
     # depending on the time of day the test runs.

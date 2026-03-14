@@ -1,9 +1,12 @@
 import hashlib
 import json
 import pathlib
+import queue
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
+from flask import current_app
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app import db
@@ -81,6 +84,199 @@ def inject_fixture_responses(course_id):
     return len(events)
 
 
+# ---------------------------------------------------------------------------
+# Phase functions — each puts progress messages on a Queue and returns events
+# ---------------------------------------------------------------------------
+
+def _phase_conversations(client, course_id, student_ids, cutoff, progress_q):
+    phase = 'conversations'
+    progress_q.put({'status': 'start', 'phase': phase})
+    t0 = time.perf_counter()
+    events = []
+    matched = 0
+    try:
+        last_sync = _get_sync_marker(course_id, 'conv_sent')
+        since = last_sync if last_sync else cutoff
+        conversations = []
+        fetched_live = False
+        page_n = 0
+        for page, is_cached in client.stream_conversations(since=since):
+            conversations.extend(page)
+            if is_cached:
+                progress_q.put({'status': 'cached', 'phase': phase})
+            else:
+                fetched_live = True
+                page_n += 1
+                progress_q.put({'status': 'page', 'phase': phase, 'n': page_n, 'count': len(page)})
+        if fetched_live:
+            _set_sync_marker(course_id, 'conv_sent')
+        for conv in conversations:
+            ts_str = conv.get('last_authored_at') or conv.get('last_message_at')
+            if not ts_str:
+                continue
+            occurred_at = datetime.fromisoformat(ts_str)
+            participant_ids = {p['id'] for p in conv.get('participants', [])}
+            for sid in participant_ids & student_ids:
+                events.append({
+                    'course_id': course_id,
+                    'student_canvas_id': sid,
+                    'event_type': 'conversation',
+                    'occurred_at': occurred_at,
+                    'source_id': conv['id'],
+                })
+                matched += 1
+    except Exception as exc:
+        progress_q.put({'status': 'error', 'phase': phase, 'msg': str(exc)})
+    progress_q.put({'status': 'done_phase', 'phase': phase, 'count': matched,
+                    'elapsed_ms': int((time.perf_counter() - t0) * 1000)})
+    return events
+
+
+def _phase_student_messages(client, course_id, student_ids, cutoff, progress_q):
+    phase = 'student_messages'
+    progress_q.put({'status': 'start', 'phase': phase})
+    t0 = time.perf_counter()
+    events = []
+    matched = 0
+    try:
+        last_sync = _get_sync_marker(course_id, 'conv_inbox')
+        since = last_sync if last_sync else cutoff
+        inbox = []
+        fetched_live = False
+        page_n = 0
+        for page, is_cached in client.stream_conversations(since=since, scope='inbox'):
+            inbox.extend(page)
+            if is_cached:
+                progress_q.put({'status': 'cached', 'phase': phase})
+            else:
+                fetched_live = True
+                page_n += 1
+                progress_q.put({'status': 'page', 'phase': phase, 'n': page_n, 'count': len(page)})
+        if fetched_live:
+            _set_sync_marker(course_id, 'conv_inbox')
+        for conv in inbox:
+            ts_str = conv.get('last_message_at')
+            if not ts_str:
+                continue
+            occurred_at = datetime.fromisoformat(ts_str)
+            participant_ids = {p['id'] for p in conv.get('participants', [])}
+            for sid in participant_ids & student_ids:
+                events.append({
+                    'course_id': course_id,
+                    'student_canvas_id': sid,
+                    'event_type': 'student_message',
+                    'occurred_at': occurred_at,
+                    'source_id': conv['id'],
+                })
+                matched += 1
+    except Exception as exc:
+        progress_q.put({'status': 'error', 'phase': phase, 'msg': str(exc)})
+    progress_q.put({'status': 'done_phase', 'phase': phase, 'count': matched,
+                    'elapsed_ms': int((time.perf_counter() - t0) * 1000)})
+    return events
+
+
+def _phase_discussions(client, course_id, student_ids, cutoff, instructor_id, progress_q):
+    phase = 'discussions'
+    progress_q.put({'status': 'start', 'phase': phase})
+    t0 = time.perf_counter()
+    events = []
+    matched = 0
+    try:
+        topics = client.get_discussion_topics(course_id)
+        for i, topic in enumerate(topics, 1):
+            progress_q.put({'status': 'page', 'phase': phase, 'n': i,
+                            'total': len(topics), 'topic': topic.get('title', '')})
+            entries = client.get_discussion_entries(course_id, topic['id'])
+            for entry in entries:
+                entry_at = datetime.fromisoformat(entry['created_at'])
+                if entry_at >= cutoff and entry.get('user_id') in student_ids:
+                    events.append({
+                        'course_id': course_id,
+                        'student_canvas_id': entry['user_id'],
+                        'event_type': 'discussion_entry',
+                        'occurred_at': entry_at,
+                        'source_id': entry['id'],
+                    })
+                    matched += 1
+                for reply in entry.get('recent_replies', []):
+                    reply_at = datetime.fromisoformat(reply['created_at'])
+                    reply_author = reply.get('user_id')
+                    if reply_at < cutoff:
+                        continue
+                    if reply_author in student_ids:
+                        events.append({
+                            'course_id': course_id,
+                            'student_canvas_id': reply_author,
+                            'event_type': 'discussion_reply',
+                            'occurred_at': reply_at,
+                            'source_id': reply['id'],
+                        })
+                        matched += 1
+                    elif reply_author == instructor_id and entry.get('user_id') in student_ids:
+                        events.append({
+                            'course_id': course_id,
+                            'student_canvas_id': entry['user_id'],
+                            'event_type': 'discussion_instructor_reply',
+                            'occurred_at': reply_at,
+                            'source_id': reply['id'],
+                        })
+                        matched += 1
+    except Exception as exc:
+        progress_q.put({'status': 'error', 'phase': phase, 'msg': str(exc)})
+    progress_q.put({'status': 'done_phase', 'phase': phase, 'count': matched,
+                    'elapsed_ms': int((time.perf_counter() - t0) * 1000)})
+    return events
+
+
+def _phase_submissions(client, course_id, student_ids, cutoff, progress_q):
+    phase = 'submissions'
+    progress_q.put({'status': 'start', 'phase': phase})
+    t0 = time.perf_counter()
+    events = []
+    matched = 0
+    try:
+        all_assignments = client.get_assignments(course_id)
+        skip_types = {'discussion_topic', 'online_quiz'}
+        assignments = [
+            a for a in all_assignments
+            if not skip_types.intersection(a.get('submission_types', []))
+        ]
+        for i, assignment in enumerate(assignments, 1):
+            progress_q.put({'status': 'page', 'phase': phase, 'n': i,
+                            'total': len(assignments),
+                            'assignment': assignment.get('name', '')})
+            submissions = client.get_submissions(course_id, assignment['id'])
+            for sub in submissions:
+                if sub.get('workflow_state') in ('unsubmitted', None):
+                    continue
+                submitted_at = sub.get('submitted_at')
+                if not submitted_at:
+                    continue
+                sub_at = datetime.fromisoformat(submitted_at)
+                if sub_at < cutoff:
+                    continue
+                if sub.get('user_id') not in student_ids:
+                    continue
+                events.append({
+                    'course_id': course_id,
+                    'student_canvas_id': sub['user_id'],
+                    'event_type': 'submission',
+                    'occurred_at': sub_at,
+                    'source_id': sub['id'],
+                })
+                matched += 1
+    except Exception as exc:
+        progress_q.put({'status': 'error', 'phase': phase, 'msg': str(exc)})
+    progress_q.put({'status': 'done_phase', 'phase': phase, 'count': matched,
+                    'elapsed_ms': int((time.perf_counter() - t0) * 1000)})
+    return events
+
+
+# ---------------------------------------------------------------------------
+# Main sync generator
+# ---------------------------------------------------------------------------
+
 def sync_course(course_id):
     """Generator that syncs Canvas data for course_id into interaction_event.
 
@@ -92,13 +288,13 @@ def sync_course(course_id):
       {'status': 'error',      'phase': str, 'msg': str}
       {'status': 'done',       'count': int, 'students': int, 'elapsed_ms': int}
     """
+    app = current_app._get_current_object()
     client = CanvasClient()
-    events = []
     today = datetime.now(timezone.utc).date()
     cutoff = datetime(today.year, today.month, today.day, tzinfo=timezone.utc) - timedelta(days=21)
     t_start = time.perf_counter()
 
-    # ── Phase: enrollments ──────────────────────────────────────────────────
+    # ── Phase: enrollments (serial — must complete before parallel phases) ──
     phase = 'enrollments'
     yield {'status': 'start', 'phase': phase}
     t0 = time.perf_counter()
@@ -124,180 +320,48 @@ def sync_course(course_id):
 
     instructor_id = client.get_current_user()['id']
 
-    # ── Phase: sent conversations ───────────────────────────────────────────
-    phase = 'conversations'
-    yield {'status': 'start', 'phase': phase}
-    t0 = time.perf_counter()
-    conv_matched = 0
-    try:
-        last_conv_sync = _get_sync_marker(course_id, 'conv_sent')
-        conv_since = last_conv_sync if last_conv_sync else cutoff
-        conversations = []
-        fetched_live = False
-        page_n = 0
-        for page, is_cached in client.stream_conversations(since=conv_since):
-            conversations.extend(page)
-            if is_cached:
-                yield {'status': 'cached', 'phase': phase}
-            else:
-                fetched_live = True
-                page_n += 1
-                yield {'status': 'page', 'phase': phase, 'n': page_n, 'count': len(page)}
-        if fetched_live:
-            _set_sync_marker(course_id, 'conv_sent')
-        for conv in conversations:
-            ts_str = conv.get('last_authored_at') or conv.get('last_message_at')
-            if not ts_str:
-                continue
-            occurred_at = datetime.fromisoformat(ts_str)
-            participant_ids = {p['id'] for p in conv.get('participants', [])}
-            for student_id in participant_ids & student_ids:
-                events.append({
-                    'course_id': course_id,
-                    'student_canvas_id': student_id,
-                    'event_type': 'conversation',
-                    'occurred_at': occurred_at,
-                    'source_id': conv['id'],
-                })
-                conv_matched += 1
-    except Exception as exc:
-        yield {'status': 'error', 'phase': phase, 'msg': str(exc)}
-    yield {'status': 'done_phase', 'phase': phase, 'count': conv_matched,
-           'elapsed_ms': int((time.perf_counter() - t0) * 1000)}
+    # ── Parallel phases ──────────────────────────────────────────────────────
+    progress_q = queue.Queue()
 
-    # ── Phase: student messages (inbox) ─────────────────────────────────────
-    phase = 'student_messages'
-    yield {'status': 'start', 'phase': phase}
-    t0 = time.perf_counter()
-    msg_matched = 0
-    try:
-        last_inbox_sync = _get_sync_marker(course_id, 'conv_inbox')
-        inbox_since = last_inbox_sync if last_inbox_sync else cutoff
-        inbox = []
-        fetched_live = False
-        page_n = 0
-        for page, is_cached in client.stream_conversations(since=inbox_since, scope='inbox'):
-            inbox.extend(page)
-            if is_cached:
-                yield {'status': 'cached', 'phase': phase}
-            else:
-                fetched_live = True
-                page_n += 1
-                yield {'status': 'page', 'phase': phase, 'n': page_n, 'count': len(page)}
-        if fetched_live:
-            _set_sync_marker(course_id, 'conv_inbox')
-        for conv in inbox:
-            ts_str = conv.get('last_message_at')
-            if not ts_str:
-                continue
-            occurred_at = datetime.fromisoformat(ts_str)
-            participant_ids = {p['id'] for p in conv.get('participants', [])}
-            for student_id in participant_ids & student_ids:
-                events.append({
-                    'course_id': course_id,
-                    'student_canvas_id': student_id,
-                    'event_type': 'student_message',
-                    'occurred_at': occurred_at,
-                    'source_id': conv['id'],
-                })
-                msg_matched += 1
-    except Exception as exc:
-        yield {'status': 'error', 'phase': phase, 'msg': str(exc)}
-    yield {'status': 'done_phase', 'phase': phase, 'count': msg_matched,
-           'elapsed_ms': int((time.perf_counter() - t0) * 1000)}
+    def _in_context(fn, *args):
+        with app.app_context():
+            return fn(*args)
 
-    # ── Phase: discussion topics + entries ──────────────────────────────────
-    phase = 'discussions'
-    yield {'status': 'start', 'phase': phase}
-    t0 = time.perf_counter()
-    disc_matched = 0
-    try:
-        topics = client.get_discussion_topics(course_id)
-        for i, topic in enumerate(topics, 1):
-            yield {'status': 'page', 'phase': phase, 'n': i, 'total': len(topics), 'topic': topic.get('title', '')}
-            entries = client.get_discussion_entries(course_id, topic['id'])
-            for entry in entries:
-                entry_at = datetime.fromisoformat(entry['created_at'])
-                if entry_at >= cutoff and entry.get('user_id') in student_ids:
-                    events.append({
-                        'course_id': course_id,
-                        'student_canvas_id': entry['user_id'],
-                        'event_type': 'discussion_entry',
-                        'occurred_at': entry_at,
-                        'source_id': entry['id'],
-                    })
-                    disc_matched += 1
-                for reply in entry.get('recent_replies', []):
-                    reply_at = datetime.fromisoformat(reply['created_at'])
-                    reply_author = reply.get('user_id')
-                    if reply_at < cutoff:
-                        continue
-                    if reply_author in student_ids:
-                        events.append({
-                            'course_id': course_id,
-                            'student_canvas_id': reply_author,
-                            'event_type': 'discussion_reply',
-                            'occurred_at': reply_at,
-                            'source_id': reply['id'],
-                        })
-                        disc_matched += 1
-                    elif reply_author == instructor_id and entry.get('user_id') in student_ids:
-                        events.append({
-                            'course_id': course_id,
-                            'student_canvas_id': entry['user_id'],
-                            'event_type': 'discussion_instructor_reply',
-                            'occurred_at': reply_at,
-                            'source_id': reply['id'],
-                        })
-                        disc_matched += 1
-    except Exception as exc:
-        yield {'status': 'error', 'phase': phase, 'msg': str(exc)}
-    yield {'status': 'done_phase', 'phase': phase, 'count': disc_matched,
-           'elapsed_ms': int((time.perf_counter() - t0) * 1000)}
-
-    # ── Phase: submissions ────────────────────────────────────────────────────
-    phase = 'submissions'
-    yield {'status': 'start', 'phase': phase}
-    t0 = time.perf_counter()
-    sub_matched = 0
-    try:
-        all_assignments = client.get_assignments(course_id)
-        # Skip discussion-based and quiz assignments — those are tracked separately
-        skip_types = {'discussion_topic', 'online_quiz'}
-        assignments = [
-            a for a in all_assignments
-            if not skip_types.intersection(a.get('submission_types', []))
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = [
+            executor.submit(_in_context, _phase_conversations,
+                            client, course_id, student_ids, cutoff, progress_q),
+            executor.submit(_in_context, _phase_student_messages,
+                            client, course_id, student_ids, cutoff, progress_q),
+            executor.submit(_in_context, _phase_discussions,
+                            client, course_id, student_ids, cutoff, instructor_id, progress_q),
+            executor.submit(_in_context, _phase_submissions,
+                            client, course_id, student_ids, cutoff, progress_q),
         ]
-        for i, assignment in enumerate(assignments, 1):
-            yield {'status': 'page', 'phase': phase, 'n': i,
-                   'total': len(assignments),
-                   'assignment': assignment.get('name', '')}
-            submissions = client.get_submissions(course_id, assignment['id'])
-            for sub in submissions:
-                if sub.get('workflow_state') in ('unsubmitted', None):
-                    continue
-                submitted_at = sub.get('submitted_at')
-                if not submitted_at:
-                    continue
-                sub_at = datetime.fromisoformat(submitted_at)
-                if sub_at < cutoff:
-                    continue
-                if sub.get('user_id') not in student_ids:
-                    continue
-                events.append({
-                    'course_id': course_id,
-                    'student_canvas_id': sub['user_id'],
-                    'event_type': 'submission',
-                    'occurred_at': sub_at,
-                    'source_id': sub['id'],
-                })
-                sub_matched += 1
-    except Exception as exc:
-        yield {'status': 'error', 'phase': phase, 'msg': str(exc)}
-    yield {'status': 'done_phase', 'phase': phase, 'count': sub_matched,
-           'elapsed_ms': int((time.perf_counter() - t0) * 1000)}
 
-    # ── Phase: saving ────────────────────────────────────────────────────────
+        # Yield progress messages as phases run
+        while not all(f.done() for f in futures):
+            try:
+                yield progress_q.get(timeout=0.05)
+            except queue.Empty:
+                continue
+
+        # Drain remaining messages after all threads complete
+        while True:
+            try:
+                yield progress_q.get_nowait()
+            except queue.Empty:
+                break
+
+        # Collect events from all phases
+        events = []
+        for f in futures:
+            try:
+                events.extend(f.result())
+            except Exception:
+                pass  # errors already reported via progress_q
+
+    # ── Phase: saving (serial) ────────────────────────────────────────────────
     phase = 'saving'
     yield {'status': 'start', 'phase': phase}
     t0 = time.perf_counter()
