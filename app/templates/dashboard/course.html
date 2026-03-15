@@ -30,6 +30,7 @@
     --tier-ok-dot: #5a9e6e;
     --icon-message: #3b6fd4;
     --icon-discussion: #7c4dba;
+    --icon-homework: #5a5a5a;
     --nav-bg: #1a1915;
     --nav-sub: #6b6760;
     --mono: 'IBM Plex Mono', monospace;
@@ -125,6 +126,39 @@
   .name-edit-cancel { background: var(--surface); color: var(--text-secondary); }
   .name-edit-cancel:hover { background: var(--border); color: var(--text-primary); }
 
+  /* ── TABS ───────────────────────────────────────────────── */
+  .tab-bar {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+  .tab-link {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    color: var(--text-tertiary);
+    text-decoration: none;
+    padding: 10px 18px;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+  .tab-link:hover { color: var(--text-secondary); }
+  .tab-link.active {
+    color: var(--text-primary);
+    border-bottom-color: var(--text-primary);
+  }
+  .tab-empty {
+    padding: 60px 0;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text-tertiary);
+    letter-spacing: 0.03em;
+  }
+
   .toolbar { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
 
   .flush-btn {
@@ -172,6 +206,9 @@
   .icon-disc         { background: #f3eefb; color: var(--icon-discussion); border: 2px solid var(--icon-discussion); }
   .icon-disc.student { border-style: dashed; }
 
+  /* Homework submission */
+  .icon-hw { background: #f0f0ee; color: var(--icon-homework); border: 2px solid var(--icon-homework); }
+
   .icon-wrap:hover {
     transform: scale(1.15) translateY(-1px);
     box-shadow: 0 3px 8px rgba(0,0,0,0.16);
@@ -194,6 +231,7 @@
     border-style: dashed;
     transition: transform 0.12s ease;
   }
+  .icon-stack .icon-back.icon-hw { border-style: solid; }
   .icon-stack .icon-front {
     position: absolute;
     top: 0; left: 0;
@@ -333,6 +371,14 @@
       <button class="name-edit-cancel" id="name-edit-cancel" type="button">Cancel</button>
     </div>
   </h1>
+  <div class="tab-bar">
+    <a class="tab-link{% if active_tab == 'timeline' %} active{% endif %}" href="{{ url_for('dashboard.course', course_id=course.id, tab='timeline') }}">Contact Timeline</a>
+    <a class="tab-link{% if active_tab == 'submissions' %} active{% endif %}" href="{{ url_for('dashboard.course', course_id=course.id, tab='submissions') }}">Submissions</a>
+    <a class="tab-link{% if active_tab == 'analytics' %} active{% endif %}" href="{{ url_for('dashboard.course', course_id=course.id, tab='analytics') }}">Analytics</a>
+  </div>
+</div>
+
+{% if active_tab == 'timeline' %}
   <div class="toolbar">
     <form method="post" action="{{ url_for('dashboard.flush_cache', course_id=course.id) }}" style="margin:0">
       <button class="flush-btn" type="submit">
@@ -374,9 +420,12 @@
         </span>
         Disc: both
       </div>
+      <div class="divider"></div>
+      <div class="legend-item">
+        <span class="icon-wrap icon-hw"><svg><use href="#ico-hw"/></svg></span>Homework
+      </div>
     </div>
   </div>
-</div>
 
 <div class="grid-wrapper">
   <table class="timeline">
@@ -413,32 +462,51 @@
                 {%- set has_instr_disc = 'discussion_instructor_reply' in types -%}
                 {%- set has_any_msg    = has_instr_msg or has_stud_msg -%}
                 {%- set has_any_disc   = has_stud_disc or has_instr_disc -%}
+                {%- set has_hw         = 'submission' in types -%}
                 {%- set disc_msg = disc_messages.get((student.canvas_id, day), '') -%}
                 {%- set msg_txt  = msg_texts.get((student.canvas_id, day), '') -%}
+                {# ── Pick the "primary" icon (msg/disc logic, same as before) ── #}
+                {%- set primary_ns = namespace(html='') -%}
                 {%- if has_any_msg and has_any_disc -%}
-                  {# message + discussion: stack, appropriate variant for each #}
+                  {%- set primary_ns.html -%}
                   <span class="icon-stack"{% if disc_msg %} data-hover-text="{{ disc_msg | e }}"{% endif %}>
                     <span class="icon-wrap icon-disc{% if not has_instr_disc %} student{% endif %} icon-back"><svg><use href="#ico-disc"/></svg></span>
                     <span class="icon-wrap icon-msg{% if not has_instr_msg %} student{% endif %} icon-front"{% if msg_txt %} data-hover-text="{{ msg_txt | e }}"{% endif %}><svg><use href="#ico-msg"/></svg></span>
                   </span>
+                  {%- endset -%}
                 {%- elif has_instr_msg and has_stud_msg -%}
+                  {%- set primary_ns.html -%}
                   <span class="icon-stack"{% if msg_txt %} data-hover-text="{{ msg_txt | e }}"{% endif %}>
                     <span class="icon-wrap icon-msg student icon-back"><svg><use href="#ico-msg"/></svg></span>
                     <span class="icon-wrap icon-msg icon-front"><svg><use href="#ico-msg"/></svg></span>
                   </span>
+                  {%- endset -%}
                 {%- elif has_instr_msg -%}
-                  <span class="icon-wrap icon-msg" title="Instructor message"{% if msg_txt %} data-hover-text="{{ msg_txt | e }}"{% endif %}><svg><use href="#ico-msg"/></svg></span>
+                  {%- set primary_ns.html -%}<span class="icon-wrap icon-msg" title="Instructor message"{% if msg_txt %} data-hover-text="{{ msg_txt | e }}"{% endif %}><svg><use href="#ico-msg"/></svg></span>{%- endset -%}
                 {%- elif has_stud_msg -%}
-                  <span class="icon-wrap icon-msg student" title="Student message"{% if msg_txt %} data-hover-text="{{ msg_txt | e }}"{% endif %}><svg><use href="#ico-msg"/></svg></span>
+                  {%- set primary_ns.html -%}<span class="icon-wrap icon-msg student" title="Student message"{% if msg_txt %} data-hover-text="{{ msg_txt | e }}"{% endif %}><svg><use href="#ico-msg"/></svg></span>{%- endset -%}
                 {%- elif has_instr_disc and has_stud_disc -%}
+                  {%- set primary_ns.html -%}
                   <span class="icon-stack"{% if disc_msg %} data-hover-text="{{ disc_msg | e }}"{% endif %}>
                     <span class="icon-wrap icon-disc student icon-back"><svg><use href="#ico-disc"/></svg></span>
                     <span class="icon-wrap icon-disc icon-front"><svg><use href="#ico-disc"/></svg></span>
                   </span>
+                  {%- endset -%}
                 {%- elif has_instr_disc -%}
-                  <span class="icon-wrap icon-disc" title="Instructor replied to discussion"{% if disc_msg %} data-hover-text="{{ disc_msg | e }}"{% endif %}><svg><use href="#ico-disc"/></svg></span>
+                  {%- set primary_ns.html -%}<span class="icon-wrap icon-disc" title="Instructor replied to discussion"{% if disc_msg %} data-hover-text="{{ disc_msg | e }}"{% endif %}><svg><use href="#ico-disc"/></svg></span>{%- endset -%}
                 {%- elif has_stud_disc -%}
-                  <span class="icon-wrap icon-disc student" title="Student discussion"{% if disc_msg %} data-hover-text="{{ disc_msg | e }}"{% endif %}><svg><use href="#ico-disc"/></svg></span>
+                  {%- set primary_ns.html -%}<span class="icon-wrap icon-disc student" title="Student discussion"{% if disc_msg %} data-hover-text="{{ disc_msg | e }}"{% endif %}><svg><use href="#ico-disc"/></svg></span>{%- endset -%}
+                {%- endif -%}
+                {# ── Render: stack hw with primary if both exist, otherwise solo ── #}
+                {%- if primary_ns.html and has_hw -%}
+                  <span class="icon-stack">
+                    <span class="icon-wrap icon-hw icon-back" title="Homework submitted"><svg><use href="#ico-hw"/></svg></span>
+                    {{ primary_ns.html }}
+                  </span>
+                {%- elif primary_ns.html -%}
+                  {{ primary_ns.html }}
+                {%- elif has_hw -%}
+                  <span class="icon-wrap icon-hw" title="Homework submitted"><svg><use href="#ico-hw"/></svg></span>
                 {%- endif -%}
               {%- endif -%}
             </td>
@@ -451,6 +519,14 @@
 
 {% if not students %}
   <p style="color:var(--text-secondary); margin-top:1rem; font-size:0.9rem;">No enrolled students found.</p>
+{% endif %}
+
+{% elif active_tab == 'submissions' %}
+  <div class="tab-empty">Submissions view coming soon.</div>
+
+{% elif active_tab == 'analytics' %}
+  <div class="tab-empty">Analytics view coming soon.</div>
+
 {% endif %}
 </div>{# .page #}
 

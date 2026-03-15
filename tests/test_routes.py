@@ -94,6 +94,28 @@ def test_course_page_shows_student_name(client):
 
 
 # ---------------------------------------------------------------------------
+# Course page tabs
+# ---------------------------------------------------------------------------
+
+def test_course_submissions_tab_200(client):
+    with patch('app.routes.dashboard.run_sync', return_value=0), \
+         patch('app.routes.dashboard.CanvasClient', return_value=_mock_client()):
+        response = client.get(f'/course/{COURSE_ID}?tab=submissions')
+    assert response.status_code == 200
+    assert b'Submissions view coming soon' in response.data
+    assert b'<table class="timeline">' not in response.data
+
+
+def test_course_analytics_tab_200(client):
+    with patch('app.routes.dashboard.run_sync', return_value=0), \
+         patch('app.routes.dashboard.CanvasClient', return_value=_mock_client()):
+        response = client.get(f'/course/{COURSE_ID}?tab=analytics')
+    assert response.status_code == 200
+    assert b'Analytics view coming soon' in response.data
+    assert b'<table class="timeline">' not in response.data
+
+
+# ---------------------------------------------------------------------------
 # Staleness coloring  (class names come from tr class="row-{{ student.staleness }}")
 # ---------------------------------------------------------------------------
 

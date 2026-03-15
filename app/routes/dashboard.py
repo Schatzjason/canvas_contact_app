@@ -334,6 +334,8 @@ def course(course_id):
     display_name_row = CourseDisplayName.query.filter_by(course_id=course_id).first()
     display_name = display_name_row.name if display_name_row else course_obj.get('name', '')
 
+    active_tab = request.args.get('tab', 'timeline')
+
     return render_template('dashboard/course.html',
         course=course_obj,
         display_name=display_name,
@@ -342,6 +344,7 @@ def course(course_id):
         today=today,
         disc_messages=disc_messages,
         msg_texts=msg_texts,
+        active_tab=active_tab,
     )
 
 
