@@ -589,6 +589,7 @@ def test_sync_parallel_phases_all_contribute_events():
             'user_id': STUDENT_A,
             'submitted_at': _days_ago(4),
             'workflow_state': 'submitted',
+            'attempt': 1,
         }]},
     )
     with patch('app.services.sync.CanvasClient', return_value=client):
@@ -674,6 +675,7 @@ def test_sync_creates_submission_event():
             'user_id': STUDENT_A,
             'submitted_at': _days_ago(2),
             'workflow_state': 'submitted',
+            'attempt': 1,
         }]},
     )
     with patch('app.services.sync.CanvasClient', return_value=client):
@@ -694,8 +696,8 @@ def test_sync_submission_skips_discussion_assignments():
             {'id': 502, 'name': 'HW 1', 'submission_types': ['online_upload']},
         ],
         submissions_by_assignment={
-            501: [{'id': 601, 'user_id': STUDENT_A, 'submitted_at': _days_ago(2), 'workflow_state': 'submitted'}],
-            502: [{'id': 602, 'user_id': STUDENT_A, 'submitted_at': _days_ago(2), 'workflow_state': 'submitted'}],
+            501: [{'id': 601, 'user_id': STUDENT_A, 'submitted_at': _days_ago(2), 'workflow_state': 'submitted', 'attempt': 1}],
+            502: [{'id': 602, 'user_id': STUDENT_A, 'submitted_at': _days_ago(2), 'workflow_state': 'submitted', 'attempt': 1}],
         },
     )
     with patch('app.services.sync.CanvasClient', return_value=client):
@@ -716,7 +718,7 @@ def test_sync_submission_skips_quiz_assignments():
             {'id': 501, 'name': 'Midterm Quiz', 'submission_types': ['online_quiz']},
         ],
         submissions_by_assignment={
-            501: [{'id': 601, 'user_id': STUDENT_A, 'submitted_at': _days_ago(2), 'workflow_state': 'submitted'}],
+            501: [{'id': 601, 'user_id': STUDENT_A, 'submitted_at': _days_ago(2), 'workflow_state': 'submitted', 'attempt': 1}],
         },
     )
     with patch('app.services.sync.CanvasClient', return_value=client):
@@ -735,6 +737,7 @@ def test_sync_submission_ignores_non_enrolled():
             'user_id': 999,
             'submitted_at': _days_ago(2),
             'workflow_state': 'submitted',
+            'attempt': 1,
         }]},
     )
     with patch('app.services.sync.CanvasClient', return_value=client):
@@ -753,6 +756,7 @@ def test_sync_submission_excludes_old():
             'user_id': STUDENT_A,
             'submitted_at': _days_ago(25),
             'workflow_state': 'submitted',
+            'attempt': 1,
         }]},
     )
     with patch('app.services.sync.CanvasClient', return_value=client):
@@ -761,16 +765,36 @@ def test_sync_submission_excludes_old():
     assert InteractionEvent.query.filter_by(event_type='submission').count() == 0
 
 
-def test_sync_submission_skips_unsubmitted():
-    """Submissions with workflow_state='unsubmitted' are skipped."""
+def test_sync_submission_skips_no_attempt():
+    """Submissions without an attempt (graded by instructor, never submitted) are skipped."""
     client = _make_client(
         enrollments=[{'user_id': STUDENT_A}],
         assignments=[{'id': 501, 'name': 'HW 1'}],
         submissions_by_assignment={501: [{
             'id': 601,
             'user_id': STUDENT_A,
-            'submitted_at': None,
-            'workflow_state': 'unsubmitted',
+            'submitted_at': _days_ago(2),
+            'workflow_state': 'graded',
+            'attempt': None,
+        }]},
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    assert InteractionEvent.query.filter_by(event_type='submission').count() == 0
+
+
+def test_sync_submission_skips_zero_attempts():
+    """Submissions with attempt=0 are skipped."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        assignments=[{'id': 501, 'name': 'HW 1'}],
+        submissions_by_assignment={501: [{
+            'id': 601,
+            'user_id': STUDENT_A,
+            'submitted_at': _days_ago(2),
+            'workflow_state': 'graded',
+            'attempt': 0,
         }]},
     )
     with patch('app.services.sync.CanvasClient', return_value=client):
@@ -789,6 +813,7 @@ def test_sync_submission_skips_no_submitted_at():
             'user_id': STUDENT_A,
             'submitted_at': None,
             'workflow_state': 'graded',
+            'attempt': 1,
         }]},
     )
     with patch('app.services.sync.CanvasClient', return_value=client):
@@ -797,8 +822,8 @@ def test_sync_submission_skips_no_submitted_at():
     assert InteractionEvent.query.filter_by(event_type='submission').count() == 0
 
 
-def test_sync_submission_accepts_graded():
-    """Submissions with workflow_state='graded' should be included."""
+def test_sync_submission_accepts_graded_with_attempt():
+    """Submissions that were submitted then graded (attempt >= 1) should be included."""
     client = _make_client(
         enrollments=[{'user_id': STUDENT_A}],
         assignments=[{'id': 501, 'name': 'HW 1'}],
@@ -807,6 +832,7 @@ def test_sync_submission_accepts_graded():
             'user_id': STUDENT_A,
             'submitted_at': _days_ago(3),
             'workflow_state': 'graded',
+            'attempt': 1,
         }]},
     )
     with patch('app.services.sync.CanvasClient', return_value=client):
@@ -823,11 +849,11 @@ def test_sync_submission_multiple_assignments():
         assignments=[{'id': 501, 'name': 'HW 1'}, {'id': 502, 'name': 'HW 2'}],
         submissions_by_assignment={
             501: [
-                {'id': 601, 'user_id': STUDENT_A, 'submitted_at': _days_ago(5), 'workflow_state': 'submitted'},
-                {'id': 602, 'user_id': STUDENT_B, 'submitted_at': _days_ago(4), 'workflow_state': 'graded'},
+                {'id': 601, 'user_id': STUDENT_A, 'submitted_at': _days_ago(5), 'workflow_state': 'submitted', 'attempt': 1},
+                {'id': 602, 'user_id': STUDENT_B, 'submitted_at': _days_ago(4), 'workflow_state': 'graded', 'attempt': 1},
             ],
             502: [
-                {'id': 603, 'user_id': STUDENT_A, 'submitted_at': _days_ago(1), 'workflow_state': 'submitted'},
+                {'id': 603, 'user_id': STUDENT_A, 'submitted_at': _days_ago(1), 'workflow_state': 'submitted', 'attempt': 1},
             ],
         },
     )
@@ -869,6 +895,7 @@ def test_sync_submission_upsert_is_idempotent():
             'user_id': STUDENT_A,
             'submitted_at': _days_ago(2),
             'workflow_state': 'submitted',
+            'attempt': 1,
         }]},
     )
     with patch('app.services.sync.CanvasClient', return_value=_make_client(**kwargs)):

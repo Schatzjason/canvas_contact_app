@@ -248,7 +248,10 @@ def _phase_submissions(client, course_id, student_ids, cutoff, progress_q):
                             'assignment': assignment.get('name', '')})
             submissions = client.get_submissions(course_id, assignment['id'])
             for sub in submissions:
-                if sub.get('workflow_state') in ('unsubmitted', None):
+                # Only count submissions the student actually made —
+                # skip graded-only entries (e.g. instructor entered a grade
+                # for attendance/participation without a student upload).
+                if not sub.get('attempt'):
                     continue
                 submitted_at = sub.get('submitted_at')
                 if not submitted_at:

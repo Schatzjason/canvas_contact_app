@@ -183,6 +183,20 @@
   .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
   .divider { width: 1px; height: 14px; background: var(--border-strong); flex-shrink: 0; }
 
+  .legend-toggle { cursor: pointer; user-select: none; }
+  .legend-cb { width: 13px; height: 13px; margin: 0; cursor: pointer; accent-color: var(--text-secondary); }
+  .legend-toggle.off .icon-wrap { opacity: 0.35; }
+
+  /* Hide icons in grid when their type is unchecked */
+  .grid-wrapper.hide-msg  .icon-msg,
+  .grid-wrapper.hide-disc .icon-disc,
+  .grid-wrapper.hide-hw   .icon-hw   { display: none; }
+  /* When all children in a stack are hidden, collapse the stack */
+  .grid-wrapper .icon-stack.all-hidden { display: none; }
+  /* When one child in a stack is hidden, un-stack the visible one */
+  .grid-wrapper .icon-stack.one-hidden { width: 26px; height: 26px; }
+  .grid-wrapper .icon-stack.one-hidden > .icon-wrap { position: static; }
+
   /* ── ICON SYSTEM ─────────────────────────────────────────── */
 
   .icon-wrap {
@@ -198,13 +212,11 @@
   }
   .icon-wrap svg { width: 15px; height: 15px; }
 
-  /* Message: instructor = solid, student = dashed */
-  .icon-msg         { background: #eef3fc; color: var(--icon-message);    border: 2px solid var(--icon-message); }
-  .icon-msg.student { border-style: dashed; }
+  /* Message */
+  .icon-msg  { background: #eef3fc; color: var(--icon-message);    border: 2px solid var(--icon-message); }
 
-  /* Discussion: instructor = solid, student = dashed */
-  .icon-disc         { background: #f3eefb; color: var(--icon-discussion); border: 2px solid var(--icon-discussion); }
-  .icon-disc.student { border-style: dashed; }
+  /* Discussion */
+  .icon-disc { background: #f3eefb; color: var(--icon-discussion); border: 2px solid var(--icon-discussion); }
 
   /* Homework submission */
   .icon-hw { background: #f0f0ee; color: var(--icon-homework); border: 2px solid var(--icon-homework); }
@@ -228,15 +240,12 @@
     position: absolute;
     bottom: 0; right: 0;
     z-index: 1;
-    border-style: dashed;
     transition: transform 0.12s ease;
   }
-  .icon-stack .icon-back.icon-hw { border-style: solid; }
   .icon-stack .icon-front {
     position: absolute;
     top: 0; left: 0;
     z-index: 2;
-    border-style: solid;
     transition: transform 0.12s ease, box-shadow 0.12s ease;
   }
   .icon-stack:hover .icon-back  { transform: translate(3px, 3px); }
@@ -393,37 +402,18 @@
       <div class="legend-item"><div class="legend-dot" style="background:var(--tier-warm-dot)"></div>{{ config.STALE_WARN_DAYS }}–{{ config.STALE_ALERT_DAYS }} days ago</div>
       <div class="legend-item"><div class="legend-dot" style="background:var(--tier-hot-dot)"></div>Over {{ config.STALE_ALERT_DAYS }} days or never</div>
       <div class="divider"></div>
-      <div class="legend-item">
-        <span class="icon-wrap icon-msg"><svg><use href="#ico-msg"/></svg></span>Msg: instructor
-      </div>
-      <div class="legend-item">
-        <span class="icon-wrap icon-msg student"><svg><use href="#ico-msg"/></svg></span>Msg: student
-      </div>
-      <div class="legend-item">
-        <span class="icon-stack">
-          <span class="icon-wrap icon-msg icon-back"><svg><use href="#ico-msg"/></svg></span>
-          <span class="icon-wrap icon-msg icon-front"><svg><use href="#ico-msg"/></svg></span>
-        </span>
-        Msg: both
-      </div>
-      <div class="divider"></div>
-      <div class="legend-item">
-        <span class="icon-wrap icon-disc"><svg><use href="#ico-disc"/></svg></span>Disc: instructor
-      </div>
-      <div class="legend-item">
-        <span class="icon-wrap icon-disc student"><svg><use href="#ico-disc"/></svg></span>Disc: student
-      </div>
-      <div class="legend-item">
-        <span class="icon-stack">
-          <span class="icon-wrap icon-disc icon-back"><svg><use href="#ico-disc"/></svg></span>
-          <span class="icon-wrap icon-disc icon-front"><svg><use href="#ico-disc"/></svg></span>
-        </span>
-        Disc: both
-      </div>
-      <div class="divider"></div>
-      <div class="legend-item">
+      <label class="legend-item legend-toggle">
+        <input type="checkbox" class="legend-cb" data-icon="msg" checked>
+        <span class="icon-wrap icon-msg"><svg><use href="#ico-msg"/></svg></span>Message
+      </label>
+      <label class="legend-item legend-toggle">
+        <input type="checkbox" class="legend-cb" data-icon="disc" checked>
+        <span class="icon-wrap icon-disc"><svg><use href="#ico-disc"/></svg></span>Discussion
+      </label>
+      <label class="legend-item legend-toggle">
+        <input type="checkbox" class="legend-cb" data-icon="hw" checked>
         <span class="icon-wrap icon-hw"><svg><use href="#ico-hw"/></svg></span>Homework
-      </div>
+      </label>
     </div>
   </div>
 
@@ -456,57 +446,29 @@
             {% set types = student.active_days.get(day) %}
             <td{% if day == today %} class="col-today"{% endif %}>
               {%- if types -%}
-                {%- set has_instr_msg  = 'conversation' in types -%}
-                {%- set has_stud_msg   = 'student_message' in types -%}
-                {%- set has_stud_disc  = 'discussion_entry' in types or 'discussion_reply' in types -%}
-                {%- set has_instr_disc = 'discussion_instructor_reply' in types -%}
-                {%- set has_any_msg    = has_instr_msg or has_stud_msg -%}
-                {%- set has_any_disc   = has_stud_disc or has_instr_disc -%}
-                {%- set has_hw         = 'submission' in types -%}
+                {%- set has_msg  = 'student_message' in types -%}
+                {%- set has_disc = 'discussion_entry' in types or 'discussion_reply' in types -%}
+                {%- set has_hw   = 'submission' in types -%}
                 {%- set disc_msg = disc_messages.get((student.canvas_id, day), '') -%}
                 {%- set msg_txt  = msg_texts.get((student.canvas_id, day), '') -%}
-                {# ── Pick the "primary" icon (msg/disc logic, same as before) ── #}
-                {%- set primary_ns = namespace(html='') -%}
-                {%- if has_any_msg and has_any_disc -%}
-                  {%- set primary_ns.html -%}
-                  <span class="icon-stack"{% if disc_msg %} data-hover-text="{{ disc_msg | e }}"{% endif %}>
-                    <span class="icon-wrap icon-disc{% if not has_instr_disc %} student{% endif %} icon-back"><svg><use href="#ico-disc"/></svg></span>
-                    <span class="icon-wrap icon-msg{% if not has_instr_msg %} student{% endif %} icon-front"{% if msg_txt %} data-hover-text="{{ msg_txt | e }}"{% endif %}><svg><use href="#ico-msg"/></svg></span>
-                  </span>
-                  {%- endset -%}
-                {%- elif has_instr_msg and has_stud_msg -%}
-                  {%- set primary_ns.html -%}
-                  <span class="icon-stack"{% if msg_txt %} data-hover-text="{{ msg_txt | e }}"{% endif %}>
-                    <span class="icon-wrap icon-msg student icon-back"><svg><use href="#ico-msg"/></svg></span>
-                    <span class="icon-wrap icon-msg icon-front"><svg><use href="#ico-msg"/></svg></span>
-                  </span>
-                  {%- endset -%}
-                {%- elif has_instr_msg -%}
-                  {%- set primary_ns.html -%}<span class="icon-wrap icon-msg" title="Instructor message"{% if msg_txt %} data-hover-text="{{ msg_txt | e }}"{% endif %}><svg><use href="#ico-msg"/></svg></span>{%- endset -%}
-                {%- elif has_stud_msg -%}
-                  {%- set primary_ns.html -%}<span class="icon-wrap icon-msg student" title="Student message"{% if msg_txt %} data-hover-text="{{ msg_txt | e }}"{% endif %}><svg><use href="#ico-msg"/></svg></span>{%- endset -%}
-                {%- elif has_instr_disc and has_stud_disc -%}
-                  {%- set primary_ns.html -%}
-                  <span class="icon-stack"{% if disc_msg %} data-hover-text="{{ disc_msg | e }}"{% endif %}>
-                    <span class="icon-wrap icon-disc student icon-back"><svg><use href="#ico-disc"/></svg></span>
-                    <span class="icon-wrap icon-disc icon-front"><svg><use href="#ico-disc"/></svg></span>
-                  </span>
-                  {%- endset -%}
-                {%- elif has_instr_disc -%}
-                  {%- set primary_ns.html -%}<span class="icon-wrap icon-disc" title="Instructor replied to discussion"{% if disc_msg %} data-hover-text="{{ disc_msg | e }}"{% endif %}><svg><use href="#ico-disc"/></svg></span>{%- endset -%}
-                {%- elif has_stud_disc -%}
-                  {%- set primary_ns.html -%}<span class="icon-wrap icon-disc student" title="Student discussion"{% if disc_msg %} data-hover-text="{{ disc_msg | e }}"{% endif %}><svg><use href="#ico-disc"/></svg></span>{%- endset -%}
+                {# ── Collect icons to render ── #}
+                {%- set icons = namespace(list=[]) -%}
+                {%- if has_msg -%}
+                  {%- set icons.list = icons.list + ['msg'] -%}
                 {%- endif -%}
-                {# ── Render: stack hw with primary if both exist, otherwise solo ── #}
-                {%- if primary_ns.html and has_hw -%}
+                {%- if has_disc -%}
+                  {%- set icons.list = icons.list + ['disc'] -%}
+                {%- endif -%}
+                {%- if has_hw -%}
+                  {%- set icons.list = icons.list + ['hw'] -%}
+                {%- endif -%}
+                {%- if icons.list|length > 1 -%}
                   <span class="icon-stack">
-                    <span class="icon-wrap icon-hw icon-back" title="Homework submitted"><svg><use href="#ico-hw"/></svg></span>
-                    {{ primary_ns.html }}
+                    <span class="icon-wrap icon-{{ icons.list[0] }} icon-back"{% if icons.list[0] == 'disc' and disc_msg %} data-hover-text="{{ disc_msg | e }}"{% elif icons.list[0] == 'msg' and msg_txt %} data-hover-text="{{ msg_txt | e }}"{% endif %}><svg><use href="#ico-{{ icons.list[0] }}"/></svg></span>
+                    <span class="icon-wrap icon-{{ icons.list[1] }} icon-front"{% if icons.list[1] == 'disc' and disc_msg %} data-hover-text="{{ disc_msg | e }}"{% elif icons.list[1] == 'msg' and msg_txt %} data-hover-text="{{ msg_txt | e }}"{% endif %}><svg><use href="#ico-{{ icons.list[1] }}"/></svg></span>
                   </span>
-                {%- elif primary_ns.html -%}
-                  {{ primary_ns.html }}
-                {%- elif has_hw -%}
-                  <span class="icon-wrap icon-hw" title="Homework submitted"><svg><use href="#ico-hw"/></svg></span>
+                {%- elif icons.list|length == 1 -%}
+                  <span class="icon-wrap icon-{{ icons.list[0] }}"{% if icons.list[0] == 'disc' and disc_msg %} data-hover-text="{{ disc_msg | e }}"{% elif icons.list[0] == 'msg' and msg_txt %} data-hover-text="{{ msg_txt | e }}"{% endif %}><svg><use href="#ico-{{ icons.list[0] }}"/></svg></span>
                 {%- endif -%}
               {%- endif -%}
             </td>
@@ -623,6 +585,50 @@
     if (e.key === 'Enter') { e.preventDefault(); saveEdit(); }
     if (e.key === 'Escape') cancelEdit();
   });
+})();
+
+(function () {
+  var STORAGE_KEY = 'timeline_icon_filters';
+  var grid = document.querySelector('.grid-wrapper');
+  var checkboxes = document.querySelectorAll('.legend-cb');
+  if (!grid || !checkboxes.length) return;
+
+  // Load saved state (default: all checked)
+  var saved = {};
+  try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch (e) {}
+
+  function applyFilters() {
+    checkboxes.forEach(function (cb) {
+      var icon = cb.dataset.icon;
+      var on = cb.checked;
+      grid.classList.toggle('hide-' + icon, !on);
+      cb.closest('.legend-toggle').classList.toggle('off', !on);
+    });
+    // Update stacks: add helper classes when children are hidden
+    grid.querySelectorAll('.icon-stack').forEach(function (stack) {
+      var children = stack.querySelectorAll('.icon-wrap');
+      var hidden = 0;
+      children.forEach(function (ch) {
+        if (getComputedStyle(ch).display === 'none') hidden++;
+      });
+      stack.classList.toggle('all-hidden', hidden === children.length);
+      stack.classList.toggle('one-hidden', hidden > 0 && hidden < children.length);
+    });
+  }
+
+  // Init checkboxes from localStorage
+  checkboxes.forEach(function (cb) {
+    var icon = cb.dataset.icon;
+    if (icon in saved) cb.checked = saved[icon];
+    cb.addEventListener('change', function () {
+      var state = {};
+      checkboxes.forEach(function (c) { state[c.dataset.icon] = c.checked; });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      applyFilters();
+    });
+  });
+
+  applyFilters();
 })();
 </script>
 {% endblock %}
