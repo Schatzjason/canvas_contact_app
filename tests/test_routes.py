@@ -35,7 +35,7 @@ def _mock_client(enrollments=None):
     return mock
 
 
-def _seed_event(days_ago, student_id=STUDENT_A, source_id=1001, event_type='conversation'):
+def _seed_event(days_ago, student_id=STUDENT_A, source_id=1001, event_type='student_message'):
     occurred_at = datetime.now(timezone.utc) - timedelta(days=days_ago)
     db.session.add(InteractionEvent(
         course_id=COURSE_ID,

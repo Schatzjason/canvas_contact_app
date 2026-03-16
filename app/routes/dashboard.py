@@ -220,7 +220,8 @@ def course(course_id):
     warn_days = current_app.config['STALE_WARN_DAYS']
     alert_days = current_app.config['STALE_ALERT_DAYS']
 
-    # Last interaction date per student (all time, not just the window)
+    # Last student-initiated interaction date per student (all time, not just the window)
+    student_event_types = ('student_message', 'discussion_entry', 'discussion_reply', 'submission')
     last_by_student = {
         row.student_canvas_id: row.last_at.astimezone(tz).date()
         for row in db.session.query(
@@ -228,6 +229,7 @@ def course(course_id):
             func.max(InteractionEvent.occurred_at).label('last_at'),
         ).filter(
             InteractionEvent.course_id == course_id,
+            InteractionEvent.event_type.in_(student_event_types),
         ).group_by(InteractionEvent.student_canvas_id).all()
     }
 
