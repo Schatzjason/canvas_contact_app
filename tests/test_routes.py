@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 from app import db
 from app.models.canvas_cache import CanvasCache
 from app.models.course_display_name import CourseDisplayName
+from app.models.check_back_date import CheckBackDate
 from app.models.interaction_event import InteractionEvent
 from app.models.student_note import StudentNote
 
@@ -289,6 +290,73 @@ def test_save_note_updates_existing(client):
         )
     assert StudentNote.query.count() == 1
     assert StudentNote.query.first().content == 'Updated note'
+
+
+# ---------------------------------------------------------------------------
+# Check-back date
+# ---------------------------------------------------------------------------
+
+def test_save_check_back_creates_row(client):
+    response = client.post(
+        f'/course/{COURSE_ID}/student/{STUDENT_A}/check-back',
+        data=_json.dumps({'date': '2026-04-15'}),
+        content_type='application/json',
+    )
+    assert response.status_code == 200
+    row = CheckBackDate.query.filter_by(
+        course_id=COURSE_ID, student_canvas_id=STUDENT_A
+    ).first()
+    assert row is not None
+    assert row.date.isoformat() == '2026-04-15'
+
+
+def test_save_check_back_updates_existing(client):
+    for d in ('2026-04-15', '2026-05-01'):
+        client.post(
+            f'/course/{COURSE_ID}/student/{STUDENT_A}/check-back',
+            data=_json.dumps({'date': d}),
+            content_type='application/json',
+        )
+    assert CheckBackDate.query.count() == 1
+    assert CheckBackDate.query.first().date.isoformat() == '2026-05-01'
+
+
+def test_save_check_back_clear(client):
+    client.post(
+        f'/course/{COURSE_ID}/student/{STUDENT_A}/check-back',
+        data=_json.dumps({'date': '2026-04-15'}),
+        content_type='application/json',
+    )
+    assert CheckBackDate.query.count() == 1
+
+    response = client.post(
+        f'/course/{COURSE_ID}/student/{STUDENT_A}/check-back',
+        data=_json.dumps({'date': ''}),
+        content_type='application/json',
+    )
+    assert response.status_code == 200
+    assert CheckBackDate.query.count() == 0
+
+
+def test_save_check_back_rejects_invalid_date(client):
+    response = client.post(
+        f'/course/{COURSE_ID}/student/{STUDENT_A}/check-back',
+        data=_json.dumps({'date': 'not-a-date'}),
+        content_type='application/json',
+    )
+    assert response.status_code == 400
+
+
+def test_student_page_shows_check_back_date(client):
+    from datetime import date
+    db.session.add(CheckBackDate(
+        course_id=COURSE_ID, student_canvas_id=STUDENT_A,
+        date=date(2026, 4, 15),
+    ))
+    db.session.commit()
+    with patch('app.routes.dashboard.CanvasClient', return_value=_mock_client_with_name()):
+        response = client.get(f'/course/{COURSE_ID}/student/{STUDENT_A}')
+    assert b'2026-04-15' in response.data
 
 
 # ---------------------------------------------------------------------------

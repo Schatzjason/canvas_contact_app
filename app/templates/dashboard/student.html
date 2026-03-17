@@ -113,6 +113,132 @@
   .notes-textarea:focus { border-color: var(--border-strong); box-shadow: 0 0 0 3px rgba(0,0,0,0.04); }
   .notes-status { font-family: var(--mono); font-size: 10px; color: var(--text-tertiary); margin-top: 5px; min-height: 14px; transition: opacity 0.3s; }
 
+  /* ── CHECK BACK ───────────────────────────────────────────── */
+  .cb-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .cb-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 11px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 5px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .cb-btn svg { width: 12px; height: 12px; flex-shrink: 0; }
+  .cb-btn:hover { border-color: var(--text-secondary); color: var(--text-primary); }
+  .cb-current {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .cb-current strong { color: var(--text-primary); font-weight: 500; }
+  .cb-clear {
+    background: none;
+    border: none;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline;
+    transition: color 0.15s;
+  }
+  .cb-clear:hover { color: var(--accent); }
+
+  .cb-popup-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.25);
+    z-index: 600;
+    align-items: center;
+    justify-content: center;
+  }
+  .cb-popup-overlay.open { display: flex; }
+  .cb-popup {
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 24px;
+    width: 320px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.16);
+  }
+  .cb-popup-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .cb-popup-hint {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-bottom: 14px;
+  }
+  .cb-input-row { display: flex; align-items: center; gap: 6px; }
+  .cb-popup-input {
+    flex: 1;
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 7px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    color: var(--text-primary);
+    background: var(--bg);
+    outline: none;
+    text-align: center;
+  }
+  .cb-popup-input:focus { border-color: var(--text-secondary); }
+  .cb-nudge {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.12s, color 0.12s;
+    user-select: none;
+  }
+  .cb-nudge:hover { background: var(--border); color: var(--text-primary); }
+  .cb-day-label {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-align: center;
+    margin-top: 6px;
+    min-height: 18px;
+  }
+  .cb-popup-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .cb-popup-actions button {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 5px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid var(--border-strong);
+    transition: all 0.12s ease;
+  }
+  .cb-popup-cancel { background: var(--surface); color: var(--text-secondary); }
+  .cb-popup-cancel:hover { background: var(--border); color: var(--text-primary); }
+  .cb-popup-save { background: var(--text-primary); color: var(--surface); border-color: var(--text-primary); }
+  .cb-popup-save:hover { opacity: 0.85; }
+
   /* ── TIMELINE ────────────────────────────────────────────── */
   .timeline { margin-top: 4px; }
 
@@ -254,6 +380,21 @@
     <textarea id="notes-area" class="notes-textarea"
               placeholder="Add notes about this student…">{{ note_content }}</textarea>
     <div class="notes-status" id="notes-status"></div>
+    <div class="cb-row">
+      <button class="cb-btn" id="cb-btn" type="button">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M5 1v3M11 1v3M2 7h12"/>
+        </svg>
+        {% if check_back_date %}Change{% else %}Set Check Back Date{% endif %}
+      </button>
+      {% if check_back_date %}
+        <span class="cb-current">Check back: <strong id="cb-display">{{ check_back_date }}</strong></span>
+        <button class="cb-clear" id="cb-clear" type="button">clear</button>
+      {% else %}
+        <span class="cb-current" id="cb-display-wrap" style="display:none">Check back: <strong id="cb-display"></strong></span>
+        <button class="cb-clear" id="cb-clear" type="button" style="display:none">clear</button>
+      {% endif %}
+    </div>
   </div>
 
   <div class="section">
@@ -303,6 +444,24 @@
           </div>
         </div>
       {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Check-back date popup -->
+<div class="cb-popup-overlay" id="cb-overlay">
+  <div class="cb-popup">
+    <div class="cb-popup-title">Set Check Back Date</div>
+    <div class="cb-popup-hint">e.g. 3/22 or 3-22</div>
+    <div class="cb-input-row">
+      <button class="cb-nudge" id="cb-minus" type="button" title="Back one day">&minus;</button>
+      <input class="cb-popup-input" id="cb-input" type="text" placeholder="3/22">
+      <button class="cb-nudge" id="cb-plus" type="button" title="Forward one day">+</button>
+    </div>
+    <div class="cb-day-label" id="cb-day-label"></div>
+    <div class="cb-popup-actions">
+      <button class="cb-popup-cancel" id="cb-cancel" type="button">Cancel</button>
+      <button class="cb-popup-save" id="cb-save" type="button">Save</button>
     </div>
   </div>
 </div>
@@ -431,6 +590,163 @@ const DRAWER_DATA = {{ day_drawer | tojson }};
 
   // Set initial size on page load
   resize();
+})();
+</script>
+
+<script>
+(function () {
+  var saveUrl    = {{ url_for('dashboard.save_check_back', course_id=course.id, student_id=student_id) | tojson }};
+  var overlay    = document.getElementById('cb-overlay');
+  var input      = document.getElementById('cb-input');
+  var dayLabel   = document.getElementById('cb-day-label');
+  var btnOpen    = document.getElementById('cb-btn');
+  var btnCancel  = document.getElementById('cb-cancel');
+  var btnSave    = document.getElementById('cb-save');
+  var btnClear   = document.getElementById('cb-clear');
+  var btnPlus    = document.getElementById('cb-plus');
+  var btnMinus   = document.getElementById('cb-minus');
+  var display    = document.getElementById('cb-display');
+  var displayWrap = document.getElementById('cb-display-wrap');
+
+  var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  // Current date held by the popup (Date object or null)
+  var currentDate = null;
+
+  function tomorrow() {
+    var d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d;
+  }
+
+  function parseInput(str) {
+    str = str.trim();
+    if (!str) return null;
+    // Try YYYY-MM-DD first
+    var full = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(str);
+    if (full) return new Date(+full[1], +full[2] - 1, +full[3]);
+    // Try M/D or M-D (assume current year)
+    var short = /^(\d{1,2})[\/\-](\d{1,2})$/.exec(str);
+    if (short) return new Date(new Date().getFullYear(), +short[1] - 1, +short[2]);
+    return null;
+  }
+
+  function toISO(d) {
+    var y = d.getFullYear();
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    var day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  }
+
+  function toShort(d) {
+    return (d.getMonth() + 1) + '/' + d.getDate();
+  }
+
+  function setDate(d) {
+    currentDate = d;
+    if (d) {
+      input.value = toShort(d);
+      dayLabel.textContent = DAYS[d.getDay()];
+    } else {
+      input.value = '';
+      dayLabel.textContent = '';
+    }
+  }
+
+  function nudge(delta) {
+    var d = currentDate || tomorrow();
+    d.setDate(d.getDate() + delta);
+    setDate(d);
+  }
+
+  function refreshFromInput() {
+    var d = parseInput(input.value);
+    if (d && !isNaN(d.getTime())) {
+      currentDate = d;
+      dayLabel.textContent = DAYS[d.getDay()];
+    } else {
+      dayLabel.textContent = input.value.trim() ? 'Invalid date' : '';
+    }
+  }
+
+  function openPopup() {
+    // If there's an existing date, pre-fill it; otherwise default to tomorrow
+    var existing = display && display.textContent;
+    var d = existing ? parseInput(existing) : null;
+    setDate(d || tomorrow());
+    overlay.classList.add('open');
+    input.focus();
+    input.select();
+  }
+
+  function closePopup() {
+    overlay.classList.remove('open');
+  }
+
+  function formatDisplay(isoStr) {
+    var d = parseInput(isoStr);
+    if (!d) return isoStr;
+    return DAYS[d.getDay()] + ' ' + toShort(d);
+  }
+
+  function updateUI(isoStr) {
+    if (isoStr) {
+      if (displayWrap) displayWrap.style.display = '';
+      if (display) display.textContent = formatDisplay(isoStr);
+      btnClear.style.display = '';
+      btnOpen.textContent = 'Change';
+    } else {
+      if (displayWrap) displayWrap.style.display = 'none';
+      if (display) display.textContent = '';
+      btnClear.style.display = 'none';
+      btnOpen.textContent = 'Set Check Back Date';
+    }
+  }
+
+  function save(isoStr) {
+    btnSave.disabled = true;
+    fetch(saveUrl, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({date: isoStr}),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.ok) {
+          updateUI(data.date);
+          closePopup();
+        }
+      })
+      .finally(function () { btnSave.disabled = false; });
+  }
+
+  function saveFromPopup() {
+    var d = currentDate || parseInput(input.value);
+    if (d && !isNaN(d.getTime())) {
+      save(toISO(d));
+    }
+  }
+
+  btnOpen.addEventListener('click', openPopup);
+  btnCancel.addEventListener('click', closePopup);
+  btnSave.addEventListener('click', saveFromPopup);
+  btnClear.addEventListener('click', function () { save(''); });
+  btnPlus.addEventListener('click', function () { nudge(1); });
+  btnMinus.addEventListener('click', function () { nudge(-1); });
+
+  input.addEventListener('input', refreshFromInput);
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); saveFromPopup(); }
+    if (e.key === 'Escape') closePopup();
+  });
+
+  overlay.addEventListener('click', function (e) {
+    if (e.target === overlay) closePopup();
+  });
+
+  // Format the initial display if a date is already set
+  var initial = display && display.textContent;
+  if (initial) updateUI(initial);
 })();
 </script>
 {% endblock %}

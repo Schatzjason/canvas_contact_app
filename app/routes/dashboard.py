@@ -11,6 +11,7 @@ from flask import redirect, request, url_for
 
 from app import db
 from app.models.canvas_cache import CanvasCache
+from app.models.check_back_date import CheckBackDate
 from app.models.course_display_name import CourseDisplayName
 from app.models.interaction_event import InteractionEvent
 from app.models.student_note import StudentNote
@@ -513,6 +514,11 @@ def student(course_id, student_id):
     ).first()
     note_content = note_row.content if note_row else ''
 
+    cb_row = CheckBackDate.query.filter_by(
+        course_id=course_id, student_canvas_id=student_id
+    ).first()
+    check_back_date = cb_row.date.isoformat() if cb_row else ''
+
     return render_template('dashboard/student.html',
         course=course_obj,
         student_id=student_id,
@@ -525,6 +531,7 @@ def student(course_id, student_id):
         active_days=active_days,
         day_drawer=day_drawer,
         note_content=note_content,
+        check_back_date=check_back_date,
     )
 
 
@@ -546,6 +553,40 @@ def save_note(course_id, student_id):
         db.session.add(note)
     db.session.commit()
     return {'ok': True}
+
+
+@bp.route('/course/<int:course_id>/student/<int:student_id>/check-back', methods=['POST'])
+def save_check_back(course_id, student_id):
+    data = request.get_json(force=True)
+    date_str = data.get('date', '').strip()
+
+    # Empty date = clear
+    if not date_str:
+        CheckBackDate.query.filter_by(
+            course_id=course_id, student_canvas_id=student_id
+        ).delete()
+        db.session.commit()
+        return {'ok': True, 'date': ''}
+
+    try:
+        parsed = date.fromisoformat(date_str)
+    except ValueError:
+        return {'ok': False, 'error': 'Invalid date format. Use YYYY-MM-DD.'}, 400
+
+    row = CheckBackDate.query.filter_by(
+        course_id=course_id, student_canvas_id=student_id
+    ).first()
+    if row:
+        row.date = parsed
+    else:
+        row = CheckBackDate(
+            course_id=course_id,
+            student_canvas_id=student_id,
+            date=parsed,
+        )
+        db.session.add(row)
+    db.session.commit()
+    return {'ok': True, 'date': parsed.isoformat()}
 
 
 @bp.route('/course/<int:course_id>/student/<int:student_id>/compose', methods=['GET', 'POST'])
