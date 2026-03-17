@@ -120,10 +120,49 @@ def index():
         ).all()
     } if course_ids else {}
 
+    # Check-back dates across all courses
+    check_back_rows = []
+    all_cb = CheckBackDate.query.order_by(CheckBackDate.date).all()
+    if all_cb:
+        cb_course_ids = {cb.course_id for cb in all_cb}
+        canvas_name_map = {c['id']: c.get('name', f'Course {c["id"]}') for c in courses}
+        course_name_map = {
+            cid: display_names.get(cid, canvas_name_map.get(cid, f'Course {cid}'))
+            for cid in cb_course_ids
+        }
+        student_name_map = {}
+        for cid in cb_course_ids:
+            try:
+                enrs = client.get_enrollments(cid)
+                for e in enrs:
+                    u = e.get('user', {})
+                    student_name_map[(cid, e['user_id'])] = (
+                        u.get('sortable_name') or u.get('name', f'Student {e["user_id"]}')
+                    )
+            except Exception:
+                pass
+
+        days_of_week = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        for cb in all_cb:
+            check_back_rows.append({
+                'student_name': student_name_map.get(
+                    (cb.course_id, cb.student_canvas_id),
+                    f'Student {cb.student_canvas_id}',
+                ),
+                'date': cb.date.isoformat(),
+                'day_of_week': days_of_week[cb.date.weekday()],
+                'short_date': f'{cb.date.month}/{cb.date.day}',
+                'course_name': course_name_map.get(cb.course_id, f'Course {cb.course_id}'),
+                'note': cb.note,
+                'course_id': cb.course_id,
+                'student_id': cb.student_canvas_id,
+            })
+
     return render_template('dashboard/index.html',
         courses=courses,
         stats_by_course=stats_by_course,
         display_names=display_names,
+        check_back_rows=check_back_rows,
     )
 
 

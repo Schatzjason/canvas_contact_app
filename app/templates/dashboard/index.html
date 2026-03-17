@@ -282,6 +282,38 @@
   }
 
   .empty { font-family: var(--mono); font-size: 13px; color: var(--text-secondary); }
+
+  /* ── CHECK-BACK TABLE ──────────────────────────────────── */
+  .cb-section { margin-top: 48px; }
+  .cb-table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .cb-table { border-collapse: collapse; width: 100%; }
+  .cb-table thead th {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-align: left;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .cb-table tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; cursor: pointer; }
+  .cb-table tbody tr:last-child { border-bottom: none; }
+  .cb-table tbody tr:hover { background: #fafaf8; }
+  .cb-table tbody td { padding: 10px 16px; font-size: 13px; }
+  .cb-td-date { font-family: var(--mono); font-size: 12px; color: var(--text-primary); white-space: nowrap; }
+  .cb-student-link { color: var(--text-primary); text-decoration: none; font-weight: 500; }
+  .cb-student-link:hover { text-decoration: underline; }
+  .cb-td-course { font-size: 12px; color: var(--text-secondary); max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cb-td-note { font-size: 12px; color: var(--text-tertiary); font-style: italic; }
 {% endblock %}
 
 {% block content %}
@@ -345,6 +377,37 @@
 
   {% else %}
   <p class="empty">No active courses found.</p>
+  {% endif %}
+
+  {% if check_back_rows %}
+  <div class="cb-section">
+    <div class="page-heading">
+      <h1>Checking Back</h1>
+      <p>{{ check_back_rows|length }} upcoming</p>
+    </div>
+    <div class="cb-table-wrap">
+      <table class="cb-table">
+        <thead>
+          <tr>
+            <th class="cb-th-date">Date</th>
+            <th class="cb-th-student">Student</th>
+            <th class="cb-th-course">Course</th>
+            <th class="cb-th-note">Note</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in check_back_rows %}
+          <tr class="cb-row-link" data-href="{{ url_for('dashboard.student', course_id=row.course_id, student_id=row.student_id) }}">
+            <td class="cb-td-date">{{ row.day_of_week }} {{ row.short_date }}</td>
+            <td><span class="cb-student-link">{{ row.student_name }}</span></td>
+            <td class="cb-td-course">{{ row.course_name }}</td>
+            <td class="cb-td-note">{{ row.note }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
   {% endif %}
 </div>
 
@@ -762,5 +825,11 @@
     }
   }
 }());
+
+document.querySelectorAll('.cb-row-link').forEach(function (row) {
+  row.addEventListener('click', function () {
+    window.location.href = this.dataset.href;
+  });
+});
 </script>
 {% endblock %}
