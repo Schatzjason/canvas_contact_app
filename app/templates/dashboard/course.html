@@ -384,7 +384,7 @@
     </div>
   </h1>
   <div class="tab-bar">
-    <a class="tab-link{% if active_tab == 'timeline' %} active{% endif %}" href="{{ url_for('dashboard.course', course_id=course.id, tab='timeline') }}">Student Work/a>
+    <a class="tab-link{% if active_tab == 'timeline' %} active{% endif %}" href="{{ url_for('dashboard.course', course_id=course.id, tab='timeline') }}">Student Work
     <a class="tab-link{% if active_tab == 'submissions' %} active{% endif %}" href="{{ url_for('dashboard.course', course_id=course.id, tab='submissions') }}">Instructor Contact</a>
     <a class="tab-link{% if active_tab == 'analytics' %} active{% endif %}" href="{{ url_for('dashboard.course', course_id=course.id, tab='analytics') }}">Analytics</a>
   </div>
@@ -490,7 +490,81 @@
 {% endif %}
 
 {% elif active_tab == 'submissions' %}
-  <div class="tab-empty">Submissions view coming soon.</div>
+  <div class="toolbar">
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:var(--tier-ok-dot)"></div>Within {{ config.STALE_WARN_DAYS }} days</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--tier-warm-dot)"></div>{{ config.STALE_WARN_DAYS }}–{{ config.STALE_ALERT_DAYS }} days ago</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--tier-hot-dot)"></div>Over {{ config.STALE_ALERT_DAYS }} days or never</div>
+      <div class="divider"></div>
+      <div class="legend-item">
+        <span class="icon-wrap icon-msg"><svg><use href="#ico-msg"/></svg></span>Message sent
+      </div>
+      <div class="legend-item">
+        <span class="icon-wrap icon-disc"><svg><use href="#ico-disc"/></svg></span>Discussion reply
+      </div>
+    </div>
+  </div>
+
+<div class="grid-wrapper">
+  <table class="timeline">
+    <thead>
+      <tr>
+        <th class="col-student">Student</th>
+        {% for day in days %}
+          <th{% if day == today %} class="col-today"{% endif %}>{{ day.month }}/{{ day.day }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% set _tier = {'green': 'tier-ok', 'yellow': 'tier-warm', 'red': 'tier-hot'} %}
+      {% set ns = namespace(prev=None) %}
+      {% for student in students %}
+        {% if ns.prev is not none and ns.prev != student.instr_staleness %}
+          <tr class="tier-separator"><td colspan="{{ days|length + 1 }}"></td></tr>
+        {% endif %}
+        {% set ns.prev = student.instr_staleness %}
+        <tr class="{{ _tier[student.instr_staleness] }}">
+          <td class="col-student">
+            <div class="student-cell-inner">
+              <div class="student-info">
+                <a class="student-name" href="{{ url_for('dashboard.student', course_id=course.id, student_id=student.canvas_id) }}">{{ student.name }}</a>
+                <div class="student-ago">
+                  {%- if student.instr_days_since is not none %}{{ student.instr_days_since }}d ago{% else %}no contact{% endif -%}
+                </div>
+              </div>
+              {% if student.score is not none %}<span class="student-score">{{ student.score | round(1) }}%</span>{% endif %}
+            </div>
+          </td>
+          {% for day in days %}
+            {% set types = student.active_days.get(day) %}
+            <td{% if day == today %} class="col-today"{% endif %}>
+              {%- if types -%}
+                {%- set has_instr_msg  = 'conversation' in types -%}
+                {%- set has_instr_disc = 'discussion_instructor_reply' in types -%}
+                {%- set instr_msg_txt  = msg_texts.get((student.canvas_id, day), '') -%}
+                {%- set instr_disc_txt = instr_disc_messages.get((student.canvas_id, day), '') -%}
+                {%- if has_instr_msg and has_instr_disc -%}
+                  <span class="icon-stack">
+                    <span class="icon-wrap icon-disc icon-back"{% if instr_disc_txt %} data-hover-text="{{ instr_disc_txt | e }}"{% endif %}><svg><use href="#ico-disc"/></svg></span>
+                    <span class="icon-wrap icon-msg icon-front"{% if instr_msg_txt %} data-hover-text="{{ instr_msg_txt | e }}"{% endif %}><svg><use href="#ico-msg"/></svg></span>
+                  </span>
+                {%- elif has_instr_msg -%}
+                  <span class="icon-wrap icon-msg"{% if instr_msg_txt %} data-hover-text="{{ instr_msg_txt | e }}"{% endif %}><svg><use href="#ico-msg"/></svg></span>
+                {%- elif has_instr_disc -%}
+                  <span class="icon-wrap icon-disc"{% if instr_disc_txt %} data-hover-text="{{ instr_disc_txt | e }}"{% endif %}><svg><use href="#ico-disc"/></svg></span>
+                {%- endif -%}
+              {%- endif -%}
+            </td>
+          {% endfor %}
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if not students %}
+  <p style="color:var(--text-secondary); margin-top:1rem; font-size:0.9rem;">No enrolled students found.</p>
+{% endif %}
 
 {% elif active_tab == 'analytics' %}
   <div class="tab-empty">Analytics view coming soon.</div>

@@ -233,11 +233,25 @@ def course(course_id):
         ).group_by(InteractionEvent.student_canvas_id).all()
     }
 
+    # Last instructor-initiated interaction date per student
+    instructor_event_types = ('conversation', 'discussion_instructor_reply')
+    last_instr_by_student = {
+        row.student_canvas_id: row.last_at.astimezone(tz).date()
+        for row in db.session.query(
+            InteractionEvent.student_canvas_id,
+            func.max(InteractionEvent.occurred_at).label('last_at'),
+        ).filter(
+            InteractionEvent.course_id == course_id,
+            InteractionEvent.event_type.in_(instructor_event_types),
+        ).group_by(InteractionEvent.student_canvas_id).all()
+    }
+
     # Which days within the 21-day window had an interaction, per student
     # active_days_by_student: {student_id: {date: set(event_types)}}
     active_days_by_student = {}
-    disc_source_ids = {}  # {(student_id, date): [source_id, ...]}
-    msg_source_ids  = {}  # {(student_id, date): [source_id, ...]}
+    disc_source_ids       = {}  # {(student_id, date): [source_id, ...]}
+    msg_source_ids        = {}  # {(student_id, date): [source_id, ...]}
+    instr_disc_source_ids = {}  # {(student_id, date): [source_id, ...]}
     for event in InteractionEvent.query.filter(
         InteractionEvent.course_id == course_id,
         InteractionEvent.occurred_at >= window_start_dt,
@@ -249,6 +263,8 @@ def course(course_id):
             disc_source_ids.setdefault((sid, day), []).append(event.source_id)
         if event.event_type in ('conversation', 'student_message'):
             msg_source_ids.setdefault((sid, day), []).append(event.source_id)
+        if event.event_type == 'discussion_instructor_reply':
+            instr_disc_source_ids.setdefault((sid, day), []).append(event.source_id)
 
     # Fetch discussion message text from the canvas cache
     disc_messages = {}
@@ -303,23 +319,46 @@ def course(course_id):
             if texts:
                 msg_texts[(sid, day)] = '\n\n---\n\n'.join(texts)
 
+    # Fetch instructor discussion reply text from the canvas cache
+    instr_disc_messages = {}
+    all_instr_disc_ids = [src for ids in instr_disc_source_ids.values() for src in ids]
+    if all_instr_disc_ids:
+        rows = db.session.execute(text("""
+            SELECT (r->>'id')::bigint AS source_id, r->>'message' AS message
+            FROM canvas_cache,
+                 jsonb_array_elements(response_json::jsonb) AS e,
+                 jsonb_array_elements(
+                     CASE WHEN jsonb_typeof(e->'recent_replies') = 'array'
+                     THEN e->'recent_replies' ELSE '[]'::jsonb END
+                 ) AS r
+            WHERE (r->>'id')::bigint = ANY(:ids)
+        """), {'ids': all_instr_disc_ids}).fetchall()
+        reply_by_source = {row.source_id: _strip_html(row.message) for row in rows}
+        for (sid, day), source_ids in instr_disc_source_ids.items():
+            texts = [reply_by_source[s] for s in source_ids if s in reply_by_source]
+            if texts:
+                instr_disc_messages[(sid, day)] = '\n\n---\n\n'.join(texts)
+
+    def _staleness(last_date):
+        if last_date is None:
+            return None, 'red'
+        d = (today - last_date).days
+        if d <= warn_days:
+            return d, 'green'
+        if d <= alert_days:
+            return d, 'yellow'
+        return d, 'red'
+
     students = []
     for enrollment in enrollments:
         user = enrollment.get('user', {})
         canvas_id = enrollment['user_id']
-        last_date = last_by_student.get(canvas_id)
 
-        if last_date is None:
-            days_since = None
-            staleness = 'red'
-        else:
-            days_since = (today - last_date).days
-            if days_since <= warn_days:
-                staleness = 'green'
-            elif days_since <= alert_days:
-                staleness = 'yellow'
-            else:
-                staleness = 'red'
+        last_date = last_by_student.get(canvas_id)
+        days_since, staleness = _staleness(last_date)
+
+        last_instr_date = last_instr_by_student.get(canvas_id)
+        instr_days_since, instr_staleness = _staleness(last_instr_date)
 
         grades = enrollment.get('grades', {})
         current_score = grades.get('current_score')
@@ -330,17 +369,24 @@ def course(course_id):
             'last_date': last_date,
             'days_since': days_since,
             'staleness': staleness,
+            'last_instr_date': last_instr_date,
+            'instr_days_since': instr_days_since,
+            'instr_staleness': instr_staleness,
             'active_days': active_days_by_student.get(canvas_id, {}),
             'score': current_score,
         })
 
-    # No interaction ever → first; then ascending by last interaction date
-    students.sort(key=lambda s: (s['last_date'] is not None, s['last_date'] or date.min))
+    active_tab = request.args.get('tab', 'timeline')
+
+    if active_tab == 'submissions':
+        # Sort by instructor contact recency
+        students.sort(key=lambda s: (s['last_instr_date'] is not None, s['last_instr_date'] or date.min))
+    else:
+        # Sort by student activity recency
+        students.sort(key=lambda s: (s['last_date'] is not None, s['last_date'] or date.min))
 
     display_name_row = CourseDisplayName.query.filter_by(course_id=course_id).first()
     display_name = display_name_row.name if display_name_row else course_obj.get('name', '')
-
-    active_tab = request.args.get('tab', 'timeline')
 
     return render_template('dashboard/course.html',
         course=course_obj,
@@ -350,6 +396,7 @@ def course(course_id):
         today=today,
         disc_messages=disc_messages,
         msg_texts=msg_texts,
+        instr_disc_messages=instr_disc_messages,
         active_tab=active_tab,
     )
 
