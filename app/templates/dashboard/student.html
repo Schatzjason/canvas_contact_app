@@ -90,7 +90,99 @@
 
   /* ── PINNED POST ─────────────────────────────────────────── */
   .section { margin-top: 32px; max-width: 680px; }
-  .section-title { font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--text-tertiary); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px; }
+  .section-title { font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--text-tertiary); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .pin-set-btn {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 2px 8px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 3px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    text-transform: none;
+    letter-spacing: 0.02em;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .pin-set-btn:hover { border-color: var(--text-secondary); color: var(--text-primary); }
+  .pin-edit-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border: none;
+    background: none;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    border-radius: 3px;
+    padding: 0;
+    transition: color 0.15s, background 0.15s;
+  }
+  .pin-edit-btn:hover { color: var(--text-primary); background: var(--border); }
+  .pin-edit-btn svg { width: 11px; height: 11px; }
+
+  .pin-picker-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.25);
+    z-index: 600;
+    align-items: center;
+    justify-content: center;
+  }
+  .pin-picker-overlay.open { display: flex; }
+  .pin-picker {
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 20px 24px;
+    width: 400px;
+    max-height: 70vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.16);
+  }
+  .pin-picker-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+  .pin-picker-list {
+    list-style: none;
+    overflow-y: auto;
+    flex: 1;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .pin-picker-item {
+    padding: 8px 10px;
+    font-size: 13px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-primary);
+    transition: background 0.1s;
+  }
+  .pin-picker-item:hover { background: var(--bg); }
+  .pin-picker-loading {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-tertiary);
+    padding: 12px 0;
+  }
+  .pin-picker-cancel {
+    margin-top: 12px;
+    align-self: flex-end;
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .pin-picker-cancel:hover { background: var(--border); color: var(--text-primary); }
   .post-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; font-size: 13.5px; line-height: 1.65; color: var(--text-primary); white-space: pre-wrap; word-break: break-word; }
   .post-card.empty { color: var(--text-tertiary); font-style: italic; }
 
@@ -386,11 +478,26 @@
   </div>
 
   <div class="section">
-    <div class="section-title">Pinned Discussion Post</div>
-    {% if pinned_post %}
-      <div class="post-card">{{ pinned_post }}</div>
+    <div class="section-title">
+      Pinned Discussion Post
+      {% if pinned_topic_id %}
+        <button class="pin-edit-btn" id="pin-edit-btn" type="button" title="Change discussion board">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11.5 1.5l3 3L5 14H2v-3L11.5 1.5z"/>
+          </svg>
+        </button>
+      {% else %}
+        <button class="pin-set-btn" id="pin-set-btn" type="button">Set</button>
+      {% endif %}
+    </div>
+    {% if pinned_topic_id %}
+      {% if pinned_post %}
+        <div class="post-card" id="pinned-post-card">{{ pinned_post }}</div>
+      {% else %}
+        <div class="post-card empty" id="pinned-post-card">No post found for this student.</div>
+      {% endif %}
     {% else %}
-      <div class="post-card empty">No post found for this student.</div>
+      <div class="post-card empty" id="pinned-post-card">No discussion board selected for this course.</div>
     {% endif %}
   </div>
 
@@ -469,6 +576,17 @@
   </div>
 </div>
 
+<!-- Discussion picker -->
+<div class="pin-picker-overlay" id="pin-overlay">
+  <div class="pin-picker">
+    <div class="pin-picker-title">Choose Discussion Board</div>
+    <ul class="pin-picker-list" id="pin-list">
+      <li class="pin-picker-loading">Loading&hellip;</li>
+    </ul>
+    <button class="pin-picker-cancel" id="pin-cancel" type="button">Cancel</button>
+  </div>
+</div>
+
 <!-- Check-back date popup -->
 <div class="cb-popup-overlay" id="cb-overlay">
   <div class="cb-popup">
@@ -496,6 +614,62 @@
   </div>
   <div class="drawer-body" id="drawer-body"></div>
 </aside>
+
+<script>
+(function () {
+  var topicsUrl = {{ url_for('dashboard.discussion_topics', course_id=course.id) | tojson }};
+  var saveUrl   = {{ url_for('dashboard.save_pinned_discussion', course_id=course.id) | tojson }};
+  var overlay   = document.getElementById('pin-overlay');
+  var list      = document.getElementById('pin-list');
+  var cancelBtn = document.getElementById('pin-cancel');
+  var setBtn    = document.getElementById('pin-set-btn');
+  var editBtn   = document.getElementById('pin-edit-btn');
+  var trigger   = setBtn || editBtn;
+  if (!trigger) return;
+
+  function openPicker() {
+    overlay.classList.add('open');
+    list.innerHTML = '<li class="pin-picker-loading">Loading\u2026</li>';
+    fetch(topicsUrl)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data.ok) { list.innerHTML = '<li class="pin-picker-loading">Failed to load.</li>'; return; }
+        list.innerHTML = '';
+        data.topics.forEach(function (t) {
+          var li = document.createElement('li');
+          li.className = 'pin-picker-item';
+          li.textContent = t.title;
+          li.addEventListener('click', function () { pickTopic(t.id); });
+          list.appendChild(li);
+        });
+        if (!data.topics.length) {
+          list.innerHTML = '<li class="pin-picker-loading">No discussion boards found.</li>';
+        }
+      });
+  }
+
+  function closePicker() { overlay.classList.remove('open'); }
+
+  function pickTopic(topicId) {
+    fetch(saveUrl, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({topic_id: topicId}),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.ok) window.location.reload();
+      });
+  }
+
+  trigger.addEventListener('click', openPicker);
+  cancelBtn.addEventListener('click', closePicker);
+  overlay.addEventListener('click', function (e) { if (e.target === overlay) closePicker(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && overlay.classList.contains('open')) closePicker();
+  });
+})();
+</script>
 
 <script>
 const DRAWER_DATA = {{ day_drawer | tojson }};

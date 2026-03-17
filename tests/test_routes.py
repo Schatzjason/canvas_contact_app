@@ -13,6 +13,7 @@ from app.models.canvas_cache import CanvasCache
 from app.models.course_display_name import CourseDisplayName
 from app.models.check_back_date import CheckBackDate
 from app.models.interaction_event import InteractionEvent
+from app.models.pinned_discussion import PinnedDiscussion
 from app.models.student_note import StudentNote
 
 COURSE_ID = 99
@@ -393,6 +394,76 @@ def test_student_page_shows_check_back_note(client):
     with patch('app.routes.dashboard.CanvasClient', return_value=_mock_client_with_name()):
         response = client.get(f'/course/{COURSE_ID}/student/{STUDENT_A}')
     assert b'Ask about project' in response.data
+
+
+# ---------------------------------------------------------------------------
+# Pinned discussion
+# ---------------------------------------------------------------------------
+
+def test_save_pinned_discussion(client):
+    response = client.post(
+        f'/course/{COURSE_ID}/pinned-discussion',
+        data=_json.dumps({'topic_id': 201}),
+        content_type='application/json',
+    )
+    assert response.status_code == 200
+    row = PinnedDiscussion.query.filter_by(course_id=COURSE_ID).first()
+    assert row is not None
+    assert row.topic_id == 201
+
+
+def test_save_pinned_discussion_updates_existing(client):
+    for tid in (201, 202):
+        client.post(
+            f'/course/{COURSE_ID}/pinned-discussion',
+            data=_json.dumps({'topic_id': tid}),
+            content_type='application/json',
+        )
+    assert PinnedDiscussion.query.count() == 1
+    assert PinnedDiscussion.query.first().topic_id == 202
+
+
+def test_save_pinned_discussion_rejects_empty(client):
+    response = client.post(
+        f'/course/{COURSE_ID}/pinned-discussion',
+        data=_json.dumps({}),
+        content_type='application/json',
+    )
+    assert response.status_code == 400
+
+
+def test_student_page_shows_set_button_when_no_pinned(client):
+    """When no pinned discussion is set, the page shows a 'Set' button."""
+    with patch('app.routes.dashboard.CanvasClient', return_value=_mock_client_with_name()):
+        response = client.get(f'/course/{COURSE_ID}/student/{STUDENT_A}')
+    assert b'pin-set-btn' in response.data
+    assert b'No discussion board selected' in response.data
+
+
+def test_student_page_shows_edit_button_when_pinned(client):
+    """When a pinned discussion is set, the page shows a pencil edit button."""
+    db.session.add(PinnedDiscussion(course_id=COURSE_ID, topic_id=201))
+    db.session.commit()
+    mock = _mock_client_with_name()
+    mock.get_discussion_entries.return_value = []
+    with patch('app.routes.dashboard.CanvasClient', return_value=mock):
+        response = client.get(f'/course/{COURSE_ID}/student/{STUDENT_A}')
+    assert b'id="pin-edit-btn"' in response.data
+    assert b'id="pin-set-btn"' not in response.data
+
+
+def test_discussion_topics_endpoint(client):
+    mock = _mock_client_with_name()
+    mock.get_discussion_topics = MagicMock(return_value=[
+        {'id': 201, 'title': 'Week 1'},
+        {'id': 202, 'title': 'Week 2'},
+    ])
+    with patch('app.routes.dashboard.CanvasClient', return_value=mock):
+        response = client.get(f'/course/{COURSE_ID}/discussion-topics')
+    data = _json.loads(response.data)
+    assert data['ok'] is True
+    assert len(data['topics']) == 2
+    assert data['topics'][0]['title'] == 'Week 1'
 
 
 # ---------------------------------------------------------------------------

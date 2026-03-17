@@ -14,13 +14,12 @@ from app.models.canvas_cache import CanvasCache
 from app.models.check_back_date import CheckBackDate
 from app.models.course_display_name import CourseDisplayName
 from app.models.interaction_event import InteractionEvent
+from app.models.pinned_discussion import PinnedDiscussion
 from app.models.student_note import StudentNote
 from app.services.canvas_client import CanvasClient, TTL_CONVERSATIONS
 from app.services.sync import run_sync, sync_course
 
 bp = Blueprint('dashboard', __name__)
-
-PINNED_DISCUSSION_TOPIC_ID = 1461939
 
 
 def _get_tz():
@@ -483,14 +482,17 @@ def student(course_id, student_id):
             'sections': sections,
         }
 
+    pinned_row = PinnedDiscussion.query.filter_by(course_id=course_id).first()
+    pinned_topic_id = pinned_row.topic_id if pinned_row else None
     pinned_post = None
-    try:
-        entries = client.get_discussion_entries(course_id, PINNED_DISCUSSION_TOPIC_ID)
-        entry = next((e for e in entries if e.get('user_id') == student_id), None)
-        if entry:
-            pinned_post = _strip_html(entry.get('message', ''))
-    except Exception as exc:
-        current_app.logger.warning('Could not load pinned discussion: %s', exc)
+    if pinned_topic_id:
+        try:
+            entries = client.get_discussion_entries(course_id, pinned_topic_id)
+            entry = next((e for e in entries if e.get('user_id') == student_id), None)
+            if entry:
+                pinned_post = _strip_html(entry.get('message', ''))
+        except Exception as exc:
+            current_app.logger.warning('Could not load pinned discussion: %s', exc)
 
     now = datetime.now(timezone.utc)
     warn_days  = current_app.config['STALE_WARN_DAYS']
@@ -534,6 +536,7 @@ def student(course_id, student_id):
         days_since=days_since,
         staleness=staleness,
         pinned_post=pinned_post,
+        pinned_topic_id=pinned_topic_id,
         days=days,
         today=today,
         active_days=active_days,
@@ -600,6 +603,35 @@ def save_check_back(course_id, student_id):
         db.session.add(row)
     db.session.commit()
     return {'ok': True, 'date': parsed.isoformat(), 'note': row.note}
+
+
+@bp.route('/course/<int:course_id>/discussion-topics')
+def discussion_topics(course_id):
+    """Return discussion topics for the course as JSON (for the picker UI)."""
+    client = CanvasClient()
+    try:
+        topics = client.get_discussion_topics(course_id)
+    except Exception as exc:
+        return {'ok': False, 'error': str(exc)}, 500
+    return {'ok': True, 'topics': [
+        {'id': t['id'], 'title': t.get('title', f'Topic {t["id"]}')}
+        for t in topics
+    ]}
+
+
+@bp.route('/course/<int:course_id>/pinned-discussion', methods=['POST'])
+def save_pinned_discussion(course_id):
+    topic_id = request.get_json(force=True).get('topic_id')
+    if not topic_id:
+        return {'ok': False, 'error': 'topic_id is required'}, 400
+    row = PinnedDiscussion.query.filter_by(course_id=course_id).first()
+    if row:
+        row.topic_id = topic_id
+    else:
+        row = PinnedDiscussion(course_id=course_id, topic_id=topic_id)
+        db.session.add(row)
+    db.session.commit()
+    return {'ok': True, 'topic_id': row.topic_id}
 
 
 @bp.route('/course/<int:course_id>/student/<int:student_id>/compose', methods=['GET', 'POST'])
