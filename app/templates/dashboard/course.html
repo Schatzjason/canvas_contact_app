@@ -384,8 +384,8 @@
     </div>
   </h1>
   <div class="tab-bar">
-    <a class="tab-link{% if active_tab == 'timeline' %} active{% endif %}" href="{{ url_for('dashboard.course', course_id=course.id, tab='timeline') }}">Contact Timeline</a>
-    <a class="tab-link{% if active_tab == 'submissions' %} active{% endif %}" href="{{ url_for('dashboard.course', course_id=course.id, tab='submissions') }}">Submissions</a>
+    <a class="tab-link{% if active_tab == 'timeline' %} active{% endif %}" href="{{ url_for('dashboard.course', course_id=course.id, tab='timeline') }}">Student Work/a>
+    <a class="tab-link{% if active_tab == 'submissions' %} active{% endif %}" href="{{ url_for('dashboard.course', course_id=course.id, tab='submissions') }}">Instructor Contact</a>
     <a class="tab-link{% if active_tab == 'analytics' %} active{% endif %}" href="{{ url_for('dashboard.course', course_id=course.id, tab='analytics') }}">Analytics</a>
   </div>
 </div>
