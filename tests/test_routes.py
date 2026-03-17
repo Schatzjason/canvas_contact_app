@@ -347,6 +347,30 @@ def test_save_check_back_rejects_invalid_date(client):
     assert response.status_code == 400
 
 
+def test_save_check_back_with_note(client):
+    response = client.post(
+        f'/course/{COURSE_ID}/student/{STUDENT_A}/check-back',
+        data=_json.dumps({'date': '2026-04-15', 'note': 'Follow up on essay'}),
+        content_type='application/json',
+    )
+    assert response.status_code == 200
+    row = CheckBackDate.query.first()
+    assert row.note == 'Follow up on essay'
+    data = _json.loads(response.data)
+    assert data['note'] == 'Follow up on essay'
+
+
+def test_save_check_back_note_truncated_to_60(client):
+    long_note = 'x' * 100
+    client.post(
+        f'/course/{COURSE_ID}/student/{STUDENT_A}/check-back',
+        data=_json.dumps({'date': '2026-04-15', 'note': long_note}),
+        content_type='application/json',
+    )
+    row = CheckBackDate.query.first()
+    assert len(row.note) == 60
+
+
 def test_student_page_shows_check_back_date(client):
     from datetime import date
     db.session.add(CheckBackDate(
@@ -357,6 +381,18 @@ def test_student_page_shows_check_back_date(client):
     with patch('app.routes.dashboard.CanvasClient', return_value=_mock_client_with_name()):
         response = client.get(f'/course/{COURSE_ID}/student/{STUDENT_A}')
     assert b'2026-04-15' in response.data
+
+
+def test_student_page_shows_check_back_note(client):
+    from datetime import date
+    db.session.add(CheckBackDate(
+        course_id=COURSE_ID, student_canvas_id=STUDENT_A,
+        date=date(2026, 4, 15), note='Ask about project',
+    ))
+    db.session.commit()
+    with patch('app.routes.dashboard.CanvasClient', return_value=_mock_client_with_name()):
+        response = client.get(f'/course/{COURSE_ID}/student/{STUDENT_A}')
+    assert b'Ask about project' in response.data
 
 
 # ---------------------------------------------------------------------------

@@ -524,6 +524,7 @@ def student(course_id, student_id):
         course_id=course_id, student_canvas_id=student_id
     ).first()
     check_back_date = cb_row.date.isoformat() if cb_row else ''
+    check_back_note = cb_row.note if cb_row else ''
 
     return render_template('dashboard/student.html',
         course=course_obj,
@@ -539,6 +540,7 @@ def student(course_id, student_id):
         day_drawer=day_drawer,
         note_content=note_content,
         check_back_date=check_back_date,
+        check_back_note=check_back_note,
     )
 
 
@@ -567,13 +569,15 @@ def save_check_back(course_id, student_id):
     data = request.get_json(force=True)
     date_str = data.get('date', '').strip()
 
+    note_str = data.get('note', '').strip()[:60]
+
     # Empty date = clear
     if not date_str:
         CheckBackDate.query.filter_by(
             course_id=course_id, student_canvas_id=student_id
         ).delete()
         db.session.commit()
-        return {'ok': True, 'date': ''}
+        return {'ok': True, 'date': '', 'note': ''}
 
     try:
         parsed = date.fromisoformat(date_str)
@@ -585,15 +589,17 @@ def save_check_back(course_id, student_id):
     ).first()
     if row:
         row.date = parsed
+        row.note = note_str
     else:
         row = CheckBackDate(
             course_id=course_id,
             student_canvas_id=student_id,
             date=parsed,
+            note=note_str,
         )
         db.session.add(row)
     db.session.commit()
-    return {'ok': True, 'date': parsed.isoformat()}
+    return {'ok': True, 'date': parsed.isoformat(), 'note': row.note}
 
 
 @bp.route('/course/<int:course_id>/student/<int:student_id>/compose', methods=['GET', 'POST'])
