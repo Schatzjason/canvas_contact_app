@@ -341,8 +341,7 @@ def course(course_id):
                    e->>'last_message'          AS last_msg
             FROM canvas_cache,
                  jsonb_array_elements(response_json::jsonb) AS e
-            WHERE e->>'subject' IS NOT NULL
-              AND (e->>'id')::bigint = ANY(:ids)
+            WHERE (e->>'id')::bigint = ANY(:ids)
         """), {'ids': all_msg_ids}).fetchall()
         conv_by_source = {}
         for row in rows:
@@ -529,8 +528,7 @@ def student(course_id, student_id):
                    e->>'last_authored_message' AS authored,
                    e->>'last_message' AS last_msg
             FROM canvas_cache, jsonb_array_elements(response_json::jsonb) AS e
-            WHERE e->>'subject' IS NOT NULL
-              AND (e->>'id')::bigint = ANY(:ids)
+            WHERE (e->>'id')::bigint = ANY(:ids)
         """), {'ids': msg_ids}).fetchall()
         for r in rows:
             parts = [f'Subject: {r.subject}'] if r.subject else []
