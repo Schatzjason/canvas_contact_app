@@ -335,9 +335,12 @@
     pointer-events: none;
   }
 
+  .student-cell-inner { display: flex; align-items: center; gap: 10px; }
+  .student-info { flex: 1; min-width: 0; }
   .student-name { font-size: 13.5px; font-weight: 500; line-height: 1.2; white-space: nowrap; color: inherit; text-decoration: none; }
   .student-name:hover { text-decoration: underline; }
   .student-ago  { font-family: var(--mono); font-size: 10px; color: var(--text-tertiary); margin-top: 2px; }
+  .student-score { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--text-secondary); white-space: nowrap; flex-shrink: 0; }
 
   tr.tier-separator td { height: 2px; padding: 0; background: var(--border-strong); }
 
@@ -389,14 +392,12 @@
 
 {% if active_tab == 'timeline' %}
   <div class="toolbar">
-    <form method="post" action="{{ url_for('dashboard.flush_cache', course_id=course.id) }}" style="margin:0">
-      <button class="flush-btn" type="submit">
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5"/><path d="M13.5 2.5v3h-3"/>
-        </svg>
-        Refetch Data
-      </button>
-    </form>
+    <a class="flush-btn" href="{{ url_for('dashboard.index', sync=course.id) }}">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5"/><path d="M13.5 2.5v3h-3"/>
+      </svg>
+      Refetch Data
+    </a>
     <div class="legend">
       <div class="legend-item"><div class="legend-dot" style="background:var(--tier-ok-dot)"></div>Within {{ config.STALE_WARN_DAYS }} days</div>
       <div class="legend-item"><div class="legend-dot" style="background:var(--tier-warm-dot)"></div>{{ config.STALE_WARN_DAYS }}–{{ config.STALE_ALERT_DAYS }} days ago</div>
@@ -437,9 +438,14 @@
         {% set ns.prev = student.staleness %}
         <tr class="{{ _tier[student.staleness] }}">
           <td class="col-student">
-            <a class="student-name" href="{{ url_for('dashboard.student', course_id=course.id, student_id=student.canvas_id) }}">{{ student.name }}</a>
-            <div class="student-ago">
-              {%- if student.last_date %}{{ student.days_since }}d ago{% else %}no contact{% endif -%}
+            <div class="student-cell-inner">
+              <div class="student-info">
+                <a class="student-name" href="{{ url_for('dashboard.student', course_id=course.id, student_id=student.canvas_id) }}">{{ student.name }}</a>
+                <div class="student-ago">
+                  {%- if student.last_date %}{{ student.days_since }}d ago{% else %}no contact{% endif -%}
+                </div>
+              </div>
+              {% if student.score is not none %}<span class="student-score">{{ student.score | round(1) }}%</span>{% endif %}
             </div>
           </td>
           {% for day in days %}

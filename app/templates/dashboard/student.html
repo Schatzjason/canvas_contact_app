@@ -67,6 +67,7 @@
   .staleness-dot.yellow { background: #d4a012; }
   .staleness-dot.red    { background: #e8705a; }
   .days-ago { font-family: var(--mono); font-size: 12px; color: var(--text-secondary); }
+  .student-score-label { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-top: 6px; }
 
   .compose-btn {
     display: inline-flex;
@@ -364,6 +365,9 @@
         Message
       </a>
     </div>
+    {% if student_score is not none %}
+      <div class="student-score-label">Current score: {{ student_score | round(1) }}%</div>
+    {% endif %}
   </div>
 
   <div class="section">

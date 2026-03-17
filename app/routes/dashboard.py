@@ -322,6 +322,9 @@ def course(course_id):
             else:
                 staleness = 'red'
 
+        grades = enrollment.get('grades', {})
+        current_score = grades.get('current_score')
+
         students.append({
             'canvas_id': canvas_id,
             'name': user.get('sortable_name') or user.get('name', f'Student {canvas_id}'),
@@ -329,6 +332,7 @@ def course(course_id):
             'days_since': days_since,
             'staleness': staleness,
             'active_days': active_days_by_student.get(canvas_id, {}),
+            'score': current_score,
         })
 
     # No interaction ever → first; then ascending by last interaction date
@@ -373,8 +377,10 @@ def student(course_id, student_id):
     if student_enrollment:
         user = student_enrollment.get('user', {})
         student_name = user.get('name', f'Student {student_id}')
+        student_score = student_enrollment.get('grades', {}).get('current_score')
     else:
         student_name = f'Student {student_id}'
+        student_score = None
 
     tz = _get_tz()
     today = datetime.now(tz).date()
@@ -523,6 +529,7 @@ def student(course_id, student_id):
         course=course_obj,
         student_id=student_id,
         student_name=student_name,
+        student_score=student_score,
         days_since=days_since,
         staleness=staleness,
         pinned_post=pinned_post,

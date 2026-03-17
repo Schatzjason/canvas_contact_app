@@ -10,11 +10,11 @@ from app import db
 from app.models.canvas_cache import CanvasCache
 
 # Cache TTLs (seconds)
-TTL_CONVERSATIONS = 30 * 60
-TTL_DISCUSSION_ENTRIES = 30 * 60
+TTL_CONVERSATIONS = 2 * 60 * 60
+TTL_DISCUSSION_ENTRIES = 2 * 60 * 60
 TTL_ENROLLMENTS = 24 * 60 * 60
-TTL_ASSIGNMENTS = 60 * 60
-TTL_SUBMISSIONS = 30 * 60
+TTL_ASSIGNMENTS = 2 * 60 * 60
+TTL_SUBMISSIONS = 2 * 60 * 60
 
 
 class CanvasClient:
@@ -143,10 +143,11 @@ class CanvasClient:
         })
 
     def get_enrollments(self, course_id):
-        """Active student enrollments for a course (cached 60 min)."""
+        """Active student enrollments for a course (cached 24 h), including total scores."""
         return self._get_all_pages(
             f'/api/v1/courses/{course_id}/enrollments',
-            params={'type[]': 'StudentEnrollment', 'state[]': 'active'},
+            params={'type[]': 'StudentEnrollment', 'state[]': 'active',
+                    'include[]': 'total_scores'},
             ttl=TTL_ENROLLMENTS,
         )
 

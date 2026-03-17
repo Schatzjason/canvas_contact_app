@@ -748,6 +748,19 @@
       };
     });
   });
+
+  // ── Auto-sync from ?sync=<course_id> (e.g. from Refetch Data on course page)
+  var params = new URLSearchParams(window.location.search);
+  var autoSync = params.get('sync');
+  if (autoSync) {
+    // Clean the URL so a page refresh doesn't re-trigger
+    history.replaceState(null, '', window.location.pathname);
+    var card = document.querySelector('a.course-link[data-course-id="' + autoSync + '"]');
+    if (card) {
+      var btn = card.querySelector('.fetch-btn');
+      if (btn) btn.click();
+    }
+  }
 }());
 </script>
 {% endblock %}
