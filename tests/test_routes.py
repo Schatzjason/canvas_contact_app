@@ -77,6 +77,29 @@ def test_index_canvas_error_returns_200(client):
     assert response.status_code == 200
 
 
+def test_index_shows_check_back_rows(client):
+    """Check-back dates appear on the index page with student name and formatted date."""
+    from datetime import date as date_cls
+    db.session.add(CheckBackDate(
+        course_id=COURSE_ID, student_canvas_id=STUDENT_A,
+        date=date_cls(2026, 3, 22), note='Follow up',
+    ))
+    db.session.commit()
+    with patch('app.routes.dashboard.CanvasClient') as MockClient:
+        MockClient.return_value.get_courses.return_value = [
+            {'id': COURSE_ID, 'name': 'Test Course', 'course_code': 'CS101', 'term': None},
+        ]
+        MockClient.return_value.get_enrollments.return_value = [
+            {'user_id': STUDENT_A, 'user': {'sortable_name': 'Smith, Alice'}},
+        ]
+        response = client.get('/')
+    html = response.data.decode()
+    assert 'Checking Back' in html
+    assert 'Smith, Alice' in html
+    assert 'Sunday 3/22' in html
+    assert 'Follow up' in html
+
+
 # ---------------------------------------------------------------------------
 # Course page
 # ---------------------------------------------------------------------------
@@ -106,6 +129,24 @@ def test_course_instructor_contact_tab_200(client):
     assert response.status_code == 200
     assert b'Message sent' in response.data
     assert b'Discussion reply' in response.data
+
+
+def test_course_instructor_tab_sorts_by_instructor_contact(client):
+    """On the instructor contact tab, students with no instructor contact appear first."""
+    # STUDENT_A has an instructor conversation, STUDENT_B has none
+    _seed_event(days_ago=3, student_id=STUDENT_A, source_id=2001, event_type='conversation')
+
+    enrollments = [
+        {'user_id': STUDENT_A, 'user': {'sortable_name': 'Smith, Alice'}},
+        {'user_id': STUDENT_B, 'user': {'sortable_name': 'Jones, Bob'}},
+    ]
+    with patch('app.routes.dashboard.run_sync', return_value=0), \
+         patch('app.routes.dashboard.CanvasClient', return_value=_mock_client(enrollments=enrollments)):
+        response = client.get(f'/course/{COURSE_ID}?tab=submissions')
+
+    html = response.data.decode()
+    # Jones (never contacted by instructor) should appear before Smith
+    assert html.index('Jones, Bob') < html.index('Smith, Alice')
 
 
 def test_course_analytics_tab_200(client):
@@ -251,6 +292,17 @@ def test_student_page_shows_name(client):
     with patch('app.routes.dashboard.CanvasClient', return_value=_mock_client_with_name('Alice Smith')):
         response = client.get(f'/course/{COURSE_ID}/student/{STUDENT_A}')
     assert b'Alice Smith' in response.data
+
+
+def test_student_page_shows_score(client):
+    mock = _mock_client(enrollments=[
+        {'user_id': STUDENT_A, 'user': {'name': 'Alice Smith', 'sortable_name': 'Alice Smith'},
+         'grades': {'current_score': 87.5}},
+    ])
+    mock.get_discussion_entries.return_value = []
+    with patch('app.routes.dashboard.CanvasClient', return_value=mock):
+        response = client.get(f'/course/{COURSE_ID}/student/{STUDENT_A}')
+    assert b'87.5%' in response.data
 
 
 def test_student_page_unknown_student_still_200(client):
@@ -546,8 +598,19 @@ def test_compose_post_creates_sent_cache_when_missing(client):
 
 
 # ---------------------------------------------------------------------------
-# flush-cache
+# Course stats endpoint
 # ---------------------------------------------------------------------------
+
+def test_course_stats_returns_badge(client):
+    _seed_event(days_ago=2)
+    response = client.get(f'/course/{COURSE_ID}/stats')
+    assert response.status_code == 200
+    data = _json.loads(response.data)
+    assert 'badge_text' in data
+    assert 'badge_class' in data
+    assert 'active_count' in data
+    assert data['active_count'] >= 1
+
 
 # ---------------------------------------------------------------------------
 # Display name
