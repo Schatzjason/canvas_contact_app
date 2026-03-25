@@ -7,7 +7,16 @@
     <span class="nav-logo">CanvasContact<span>Tracker</span></span>
     <span class="nav-label">Instructor Tools</span>
   </div>
-  <span class="nav-meta">Spring 2025</span>
+  <div class="nav-right">
+    <div class="nav-search" id="nav-search">
+      <svg class="nav-search-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="6.5" cy="6.5" r="4.5"/><path d="M10 10l4 4"/>
+      </svg>
+      <input class="nav-search-input" id="search-input" type="text" placeholder="Search students">
+      <div class="nav-search-results" id="search-results"></div>
+    </div>
+    <span class="nav-meta">Spring 2025</span>
+  </div>
 </nav>
 {% endblock %}
 
@@ -314,12 +323,83 @@
   .cb-student-link:hover { text-decoration: underline; }
   .cb-td-course { font-size: 12px; color: var(--text-secondary); max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .cb-td-note { font-size: 12px; color: var(--text-tertiary); font-style: italic; }
+
+  /* ── NAV SEARCH ─────────────────────────────────────────── */
+  .nav-right { display: flex; align-items: center; gap: 16px; }
+  .nav-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 160px;
+    height: 30px;
+    background: rgba(255,255,255,0.08);
+    border: 0.5px solid rgba(255,255,255,0.2);
+    border-radius: 15px;
+    padding: 0 10px;
+    cursor: text;
+    transition: width 0.2s ease, background 0.2s ease;
+  }
+  .nav-search.expanded {
+    width: 280px;
+    background: rgba(255,255,255,0.12);
+  }
+  .nav-search-icon {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+    color: rgba(255,255,255,0.45);
+    transition: color 0.15s;
+  }
+  .nav-search.expanded .nav-search-icon { color: rgba(255,255,255,0.7); }
+  .nav-search-input {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: #fff;
+    padding: 0 6px;
+    min-width: 0;
+  }
+  .nav-search-input::placeholder { color: rgba(255,255,255,0.35); }
+  .nav-search-results {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    min-width: 300px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    max-height: 320px;
+    overflow-y: auto;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.14);
+    z-index: 1000;
+  }
+  .nav-search-results:empty { display: none; }
+  .search-result {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px;
+    cursor: pointer;
+    text-decoration: none;
+    color: inherit;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+  }
+  .search-result:last-child { border-bottom: none; }
+  .search-result:hover { background: #fafaf8; }
+  .search-result-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+  .search-result-section { font-family: var(--mono); font-size: 11px; color: var(--text-tertiary); letter-spacing: 0.04em; }
+  .search-empty { padding: 12px 14px; font-size: 13px; color: var(--text-tertiary); }
 {% endblock %}
 
 {% block content %}
 <div class="page">
   <div class="page-heading">
-    <h1>Your Courses</h1>
+    <h1>Courses</h1>
     <p>{{ courses|length }} active course{{ 's' if courses|length != 1 }}</p>
   </div>
 
@@ -382,7 +462,7 @@
   {% if check_back_rows %}
   <div class="cb-section">
     <div class="page-heading">
-      <h1>Checking Back</h1>
+      <h1>Check Back</h1>
       <p>{{ check_back_rows|length }} upcoming</p>
     </div>
     <div class="cb-table-wrap">
@@ -831,5 +911,74 @@ document.querySelectorAll('.cb-row-link').forEach(function (row) {
     window.location.href = this.dataset.href;
   });
 });
+
+// ── Student search (nav bar) ────────────────────────────────────────────
+(function () {
+  var STUDENTS = {{ search_students | tojson }};
+  var wrap     = document.getElementById('nav-search');
+  var input    = document.getElementById('search-input');
+  var results  = document.getElementById('search-results');
+  if (!wrap) return;
+
+  function expand() {
+    wrap.classList.add('expanded');
+    input.focus();
+  }
+
+  function collapse() {
+    if (input.value.trim()) return;  // keep open while there's text
+    wrap.classList.remove('expanded');
+    results.innerHTML = '';
+  }
+
+  wrap.addEventListener('click', expand);
+
+  input.addEventListener('blur', function () {
+    // Delay so click on a result can fire first
+    setTimeout(collapse, 150);
+  });
+
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      input.value = '';
+      results.innerHTML = '';
+      wrap.classList.remove('expanded');
+      input.blur();
+    }
+  });
+
+  function escHtml(str) {
+    var d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  function render(matches) {
+    results.innerHTML = '';
+    if (!input.value.trim()) return;
+    if (!matches.length) {
+      results.innerHTML = '<div class="search-empty">No matches</div>';
+      return;
+    }
+    matches.slice(0, 30).forEach(function (s) {
+      var a = document.createElement('a');
+      a.className = 'search-result';
+      a.href = '/course/' + s.course_id + '/student/' + s.student_id;
+      a.innerHTML =
+        '<span class="search-result-name">' + escHtml(s.name) + '</span>' +
+        '<span class="search-result-section">' + escHtml(s.section) + '</span>';
+      results.appendChild(a);
+    });
+  }
+
+  input.addEventListener('input', function () {
+    var q = input.value.trim().toLowerCase();
+    if (!q) { results.innerHTML = ''; return; }
+    var matches = STUDENTS.filter(function (s) {
+      return s.name.toLowerCase().indexOf(q) !== -1;
+    });
+    render(matches);
+  });
+})();
 </script>
 {% endblock %}

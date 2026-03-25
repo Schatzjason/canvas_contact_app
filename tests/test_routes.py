@@ -94,7 +94,7 @@ def test_index_shows_check_back_rows(client):
         ]
         response = client.get('/')
     html = response.data.decode()
-    assert 'Checking Back' in html
+    assert 'Check Back' in html
     assert 'Smith, Alice' in html
     assert 'Sunday 3/22' in html
     assert 'Follow up' in html

@@ -158,11 +158,32 @@ def index():
                 'student_id': cb.student_canvas_id,
             })
 
+    # Build student search index across all courses (enrollments are cached 24h)
+    search_students = []
+    for c in courses:
+        section = c.get('course_code', '')
+        # Extract trailing section number (e.g. "CS111B-932" → "932")
+        if '-' in section:
+            section = section.rsplit('-', 1)[-1]
+        try:
+            enrs = client.get_enrollments(c['id'])
+        except Exception:
+            enrs = []
+        for e in enrs:
+            u = e.get('user', {})
+            search_students.append({
+                'name': u.get('sortable_name') or u.get('name', f'Student {e["user_id"]}'),
+                'section': section,
+                'course_id': c['id'],
+                'student_id': e['user_id'],
+            })
+
     return render_template('dashboard/index.html',
         courses=courses,
         stats_by_course=stats_by_course,
         display_names=display_names,
         check_back_rows=check_back_rows,
+        search_students=search_students,
     )
 
 
