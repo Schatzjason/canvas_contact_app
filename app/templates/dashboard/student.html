@@ -230,18 +230,6 @@
     color: var(--text-secondary);
   }
   .cb-current strong { color: var(--text-primary); font-weight: 500; }
-  .cb-clear {
-    background: none;
-    border: none;
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--text-tertiary);
-    cursor: pointer;
-    padding: 0;
-    text-decoration: underline;
-    transition: color 0.15s;
-  }
-  .cb-clear:hover { color: var(--accent); }
   .cb-note-display { font-family: var(--sans); font-size: 12px; color: var(--text-tertiary); font-style: italic; }
 
   .cb-popup-overlay {
@@ -344,8 +332,11 @@
   }
   .cb-popup-cancel { background: var(--surface); color: var(--text-secondary); }
   .cb-popup-cancel:hover { background: var(--border); color: var(--text-primary); }
+  .cb-popup-remove { background: var(--surface); color: #c0392b; border-color: #c0392b; }
+  .cb-popup-remove:hover { background: #fef2f0; }
   .cb-popup-save { background: var(--text-primary); color: var(--surface); border-color: var(--text-primary); }
   .cb-popup-save:hover { opacity: 0.85; }
+  .cb-popup-spacer { flex: 1; }
 
   /* ── TIMELINE ────────────────────────────────────────────── */
   .timeline { margin-top: 4px; }
@@ -515,11 +506,9 @@
       </button>
       {% if check_back_date %}
         <span class="cb-current">Check back: <strong id="cb-display">{{ check_back_date }}</strong></span>
-        <button class="cb-clear" id="cb-clear" type="button">clear</button>
         {% if check_back_note %}<span class="cb-note-display" id="cb-note-display">{{ check_back_note }}</span>{% else %}<span class="cb-note-display" id="cb-note-display" style="display:none"></span>{% endif %}
       {% else %}
         <span class="cb-current" id="cb-display-wrap" style="display:none">Check back: <strong id="cb-display"></strong></span>
-        <button class="cb-clear" id="cb-clear" type="button" style="display:none">clear</button>
         <span class="cb-note-display" id="cb-note-display" style="display:none"></span>
       {% endif %}
     </div>
@@ -601,6 +590,8 @@
     <input class="cb-note-input" id="cb-note" type="text" placeholder="Note (optional)" maxlength="60">
     <div class="cb-popup-actions">
       <button class="cb-popup-cancel" id="cb-cancel" type="button">Cancel</button>
+      <button class="cb-popup-remove" id="cb-remove" type="button">Remove</button>
+      <span class="cb-popup-spacer"></span>
       <button class="cb-popup-save" id="cb-save" type="button">Save</button>
     </div>
   </div>
@@ -799,7 +790,7 @@ const DRAWER_DATA = {{ day_drawer | tojson }};
   var btnOpen     = document.getElementById('cb-btn');
   var btnCancel   = document.getElementById('cb-cancel');
   var btnSave     = document.getElementById('cb-save');
-  var btnClear    = document.getElementById('cb-clear');
+  var btnRemove   = document.getElementById('cb-remove');
   var btnPlus     = document.getElementById('cb-plus');
   var btnMinus    = document.getElementById('cb-minus');
   var display     = document.getElementById('cb-display');
@@ -892,7 +883,6 @@ const DRAWER_DATA = {{ day_drawer | tojson }};
     if (isoStr) {
       if (displayWrap) displayWrap.style.display = '';
       if (display) display.textContent = formatDisplay(isoStr);
-      btnClear.style.display = '';
       btnOpen.textContent = 'Change';
       if (noteDisplay) {
         noteDisplay.textContent = note || '';
@@ -901,7 +891,6 @@ const DRAWER_DATA = {{ day_drawer | tojson }};
     } else {
       if (displayWrap) displayWrap.style.display = 'none';
       if (display) display.textContent = '';
-      btnClear.style.display = 'none';
       btnOpen.textContent = 'Set Check Back Date';
       if (noteDisplay) { noteDisplay.textContent = ''; noteDisplay.style.display = 'none'; }
     }
@@ -934,7 +923,7 @@ const DRAWER_DATA = {{ day_drawer | tojson }};
   btnOpen.addEventListener('click', openPopup);
   btnCancel.addEventListener('click', closePopup);
   btnSave.addEventListener('click', saveFromPopup);
-  btnClear.addEventListener('click', function () { save('', ''); });
+  btnRemove.addEventListener('click', function () { save('', ''); });
   btnPlus.addEventListener('click', function () { nudge(1); });
   btnMinus.addEventListener('click', function () { nudge(-1); });
 
