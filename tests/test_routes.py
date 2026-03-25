@@ -32,7 +32,12 @@ def _mock_client(enrollments=None):
         'id': COURSE_ID, 'name': 'Test Course', 'course_code': 'CS101',
     }
     mock.get_enrollments.return_value = enrollments or [
-        {'user_id': STUDENT_A, 'user': {'sortable_name': 'Smith, Alice'}},
+        {'user_id': STUDENT_A, 'user': {'sortable_name': 'Smith, Alice'},
+         'grades': {'current_score': None}},
+    ]
+    mock.get_discussion_entries.return_value = []
+    mock.get_courses.return_value = [
+        {'id': COURSE_ID, 'name': 'Test Course', 'course_code': 'CS101', 'term': None},
     ]
     return mock
 
@@ -100,6 +105,24 @@ def test_index_shows_check_back_rows(client):
     assert 'Follow up' in html
 
 
+def test_index_embeds_search_students(client):
+    """The index page embeds student search data as JSON for the nav search."""
+    with patch('app.routes.dashboard.CanvasClient') as MockClient:
+        MockClient.return_value.get_courses.return_value = [
+            {'id': COURSE_ID, 'name': 'Test Course', 'course_code': 'CS101-932', 'term': None},
+        ]
+        MockClient.return_value.get_enrollments.return_value = [
+            {'user_id': STUDENT_A, 'user': {'sortable_name': 'Smith, Alice'},
+             'grades': {'current_score': None}},
+        ]
+        response = client.get('/')
+    html = response.data.decode()
+    # The student name should appear in the embedded JSON
+    assert 'Smith, Alice' in html
+    # Section extracted from course_code after last hyphen
+    assert '932' in html
+
+
 # ---------------------------------------------------------------------------
 # Course page
 # ---------------------------------------------------------------------------
@@ -116,6 +139,17 @@ def test_course_page_shows_student_name(client):
          patch('app.routes.dashboard.CanvasClient', return_value=_mock_client()):
         response = client.get(f'/course/{COURSE_ID}')
     assert b'Smith, Alice' in response.data
+
+
+def test_course_page_shows_student_score(client):
+    enrollments = [
+        {'user_id': STUDENT_A, 'user': {'sortable_name': 'Smith, Alice'},
+         'grades': {'current_score': 91.2}},
+    ]
+    with patch('app.routes.dashboard.run_sync', return_value=0), \
+         patch('app.routes.dashboard.CanvasClient', return_value=_mock_client(enrollments=enrollments)):
+        response = client.get(f'/course/{COURSE_ID}')
+    assert b'91.2%' in response.data
 
 
 # ---------------------------------------------------------------------------
@@ -516,6 +550,16 @@ def test_discussion_topics_endpoint(client):
     assert data['ok'] is True
     assert len(data['topics']) == 2
     assert data['topics'][0]['title'] == 'Week 1'
+
+
+def test_discussion_topics_canvas_error(client):
+    mock = _mock_client_with_name()
+    mock.get_discussion_topics = MagicMock(side_effect=Exception('Canvas down'))
+    with patch('app.routes.dashboard.CanvasClient', return_value=mock):
+        response = client.get(f'/course/{COURSE_ID}/discussion-topics')
+    assert response.status_code == 500
+    data = _json.loads(response.data)
+    assert data['ok'] is False
 
 
 # ---------------------------------------------------------------------------
