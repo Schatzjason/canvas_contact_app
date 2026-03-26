@@ -194,6 +194,42 @@ def test_course_analytics_tab_200(client):
 
 
 # ---------------------------------------------------------------------------
+# Student selection checkboxes
+# ---------------------------------------------------------------------------
+
+def test_course_page_has_select_all_checkbox(client):
+    with patch('app.routes.dashboard.run_sync', return_value=0), \
+         patch('app.routes.dashboard.CanvasClient', return_value=_mock_client()):
+        response = client.get(f'/course/{COURSE_ID}')
+    assert b'select-all-cb' in response.data
+
+
+def test_course_page_has_row_checkboxes(client):
+    with patch('app.routes.dashboard.run_sync', return_value=0), \
+         patch('app.routes.dashboard.CanvasClient', return_value=_mock_client()):
+        response = client.get(f'/course/{COURSE_ID}')
+    html = response.data.decode()
+    assert f'value="{STUDENT_A}"' in html
+
+
+def test_course_page_has_selection_toolbar(client):
+    with patch('app.routes.dashboard.run_sync', return_value=0), \
+         patch('app.routes.dashboard.CanvasClient', return_value=_mock_client()):
+        response = client.get(f'/course/{COURSE_ID}')
+    assert b'toolbar-selection' in response.data
+    assert b'Send Message' in response.data
+    assert b'Clear selection' in response.data
+
+
+def test_submissions_tab_has_checkboxes(client):
+    with patch('app.routes.dashboard.run_sync', return_value=0), \
+         patch('app.routes.dashboard.CanvasClient', return_value=_mock_client()):
+        response = client.get(f'/course/{COURSE_ID}?tab=submissions')
+    assert b'select-all-cb' in response.data
+    assert b'toolbar-selection' in response.data
+
+
+# ---------------------------------------------------------------------------
 # Staleness coloring  (class names come from tr class="row-{{ student.staleness }}")
 # ---------------------------------------------------------------------------
 

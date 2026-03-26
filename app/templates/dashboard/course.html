@@ -344,6 +344,72 @@
 
   tr.tier-separator td { height: 2px; padding: 0; background: var(--border-strong); }
 
+  /* ── CHECKBOX COLUMN ─────────────────────────────────────── */
+  .col-check {
+    width: 36px;
+    min-width: 36px;
+    max-width: 36px;
+    text-align: center;
+    padding: 0 !important;
+  }
+  table.timeline thead th.col-check { border-bottom: 1px solid var(--border); }
+  table.timeline td.col-check { border-right: none; }
+  .row-cb, .select-all-cb {
+    width: 14px; height: 14px; margin: 0; cursor: pointer;
+    accent-color: var(--text-secondary);
+  }
+
+  /* ── SELECTION TOOLBAR ──────────────────────────────────── */
+  .toolbar { position: relative; }
+  .toolbar-normal,
+  .toolbar-selection {
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+  }
+  .toolbar-selection {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    opacity: 0;
+    visibility: hidden;
+    position: absolute;
+    top: 0; left: 0;
+    height: 100%;
+  }
+  .toolbar.selection-mode .toolbar-normal   { opacity: 0; visibility: hidden; pointer-events: none; }
+  .toolbar.selection-mode .toolbar-selection { opacity: 1; visibility: visible; position: static; }
+  .sel-count {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+  .sel-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 6px 14px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+    white-space: nowrap;
+  }
+  .sel-send {
+    background: var(--icon-message);
+    color: #fff;
+    border: 1px solid var(--icon-message);
+  }
+  .sel-send:hover { background: #2d5cbf; border-color: #2d5cbf; }
+  .sel-send svg { width: 13px; height: 13px; }
+  .sel-clear {
+    background: var(--surface);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-strong);
+  }
+  .sel-clear:hover { background: var(--border); color: var(--text-primary); }
+
   /* ── DISCUSSION POPUP ───────────────────────────────────── */
   #disc-popup {
     display: none;
@@ -391,37 +457,48 @@
 </div>
 
 {% if active_tab == 'timeline' %}
-  <div class="toolbar">
-    <a class="flush-btn" href="{{ url_for('dashboard.index', sync=course.id) }}">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5"/><path d="M13.5 2.5v3h-3"/>
-      </svg>
-      Refetch Data
-    </a>
-    <div class="legend">
-      <div class="legend-item"><div class="legend-dot" style="background:var(--tier-ok-dot)"></div>Within {{ config.STALE_WARN_DAYS }} days</div>
-      <div class="legend-item"><div class="legend-dot" style="background:var(--tier-warm-dot)"></div>{{ config.STALE_WARN_DAYS }}–{{ config.STALE_ALERT_DAYS }} days ago</div>
-      <div class="legend-item"><div class="legend-dot" style="background:var(--tier-hot-dot)"></div>Over {{ config.STALE_ALERT_DAYS }} days or never</div>
-      <div class="divider"></div>
-      <label class="legend-item legend-toggle">
-        <input type="checkbox" class="legend-cb" data-icon="msg" checked>
-        <span class="icon-wrap icon-msg"><svg><use href="#ico-msg"/></svg></span>Message
-      </label>
-      <label class="legend-item legend-toggle">
-        <input type="checkbox" class="legend-cb" data-icon="disc" checked>
-        <span class="icon-wrap icon-disc"><svg><use href="#ico-disc"/></svg></span>Discussion
-      </label>
-      <label class="legend-item legend-toggle">
-        <input type="checkbox" class="legend-cb" data-icon="hw" checked>
-        <span class="icon-wrap icon-hw"><svg><use href="#ico-hw"/></svg></span>Homework
-      </label>
+  <div class="toolbar" id="toolbar-timeline">
+    <div class="toolbar-normal">
+      <a class="flush-btn" href="{{ url_for('dashboard.index', sync=course.id) }}">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5"/><path d="M13.5 2.5v3h-3"/>
+        </svg>
+        Refetch Data
+      </a>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--tier-ok-dot)"></div>Within {{ config.STALE_WARN_DAYS }} days</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--tier-warm-dot)"></div>{{ config.STALE_WARN_DAYS }}–{{ config.STALE_ALERT_DAYS }} days ago</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--tier-hot-dot)"></div>Over {{ config.STALE_ALERT_DAYS }} days or never</div>
+        <div class="divider"></div>
+        <label class="legend-item legend-toggle">
+          <input type="checkbox" class="legend-cb" data-icon="msg" checked>
+          <span class="icon-wrap icon-msg"><svg><use href="#ico-msg"/></svg></span>Message
+        </label>
+        <label class="legend-item legend-toggle">
+          <input type="checkbox" class="legend-cb" data-icon="disc" checked>
+          <span class="icon-wrap icon-disc"><svg><use href="#ico-disc"/></svg></span>Discussion
+        </label>
+        <label class="legend-item legend-toggle">
+          <input type="checkbox" class="legend-cb" data-icon="hw" checked>
+          <span class="icon-wrap icon-hw"><svg><use href="#ico-hw"/></svg></span>Homework
+        </label>
+      </div>
+    </div>
+    <div class="toolbar-selection">
+      <span class="sel-count" id="sel-count-timeline">0 students selected</span>
+      <button type="button" class="sel-btn sel-send" id="sel-send-timeline">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 2.5h13l-6.5 5.5-6.5-5.5z"/><path d="M1.5 2.5v9h13v-9"/></svg>
+        Send Message
+      </button>
+      <button type="button" class="sel-btn sel-clear" id="sel-clear-timeline">Clear selection</button>
     </div>
   </div>
 
 <div class="grid-wrapper">
-  <table class="timeline">
+  <table class="timeline" id="table-timeline">
     <thead>
       <tr>
+        <th class="col-check"><input type="checkbox" class="select-all-cb" data-table="table-timeline"></th>
         <th class="col-student">Student</th>
         {% for day in days %}
           <th{% if day == today %} class="col-today"{% endif %}>{{ day.month }}/{{ day.day }}</th>
@@ -433,10 +510,11 @@
       {% set ns = namespace(prev=None) %}
       {% for student in students %}
         {% if ns.prev is not none and ns.prev != student.staleness %}
-          <tr class="tier-separator"><td colspan="{{ days|length + 1 }}"></td></tr>
+          <tr class="tier-separator"><td colspan="{{ days|length + 2 }}"></td></tr>
         {% endif %}
         {% set ns.prev = student.staleness %}
         <tr class="{{ _tier[student.staleness] }}">
+          <td class="col-check"><input type="checkbox" class="row-cb" value="{{ student.canvas_id }}" data-name="{{ student.name | e }}"></td>
           <td class="col-student">
             <div class="student-cell-inner">
               <div class="student-info">
@@ -490,25 +568,36 @@
 {% endif %}
 
 {% elif active_tab == 'submissions' %}
-  <div class="toolbar">
-    <div class="legend">
-      <div class="legend-item"><div class="legend-dot" style="background:var(--tier-ok-dot)"></div>Within {{ config.STALE_WARN_DAYS }} days</div>
-      <div class="legend-item"><div class="legend-dot" style="background:var(--tier-warm-dot)"></div>{{ config.STALE_WARN_DAYS }}–{{ config.STALE_ALERT_DAYS }} days ago</div>
-      <div class="legend-item"><div class="legend-dot" style="background:var(--tier-hot-dot)"></div>Over {{ config.STALE_ALERT_DAYS }} days or never</div>
-      <div class="divider"></div>
-      <div class="legend-item">
-        <span class="icon-wrap icon-msg"><svg><use href="#ico-msg"/></svg></span>Message sent
+  <div class="toolbar" id="toolbar-submissions">
+    <div class="toolbar-normal">
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--tier-ok-dot)"></div>Within {{ config.STALE_WARN_DAYS }} days</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--tier-warm-dot)"></div>{{ config.STALE_WARN_DAYS }}–{{ config.STALE_ALERT_DAYS }} days ago</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--tier-hot-dot)"></div>Over {{ config.STALE_ALERT_DAYS }} days or never</div>
+        <div class="divider"></div>
+        <div class="legend-item">
+          <span class="icon-wrap icon-msg"><svg><use href="#ico-msg"/></svg></span>Message sent
+        </div>
+        <div class="legend-item">
+          <span class="icon-wrap icon-disc"><svg><use href="#ico-disc"/></svg></span>Discussion reply
+        </div>
       </div>
-      <div class="legend-item">
-        <span class="icon-wrap icon-disc"><svg><use href="#ico-disc"/></svg></span>Discussion reply
-      </div>
+    </div>
+    <div class="toolbar-selection">
+      <span class="sel-count" id="sel-count-submissions">0 students selected</span>
+      <button type="button" class="sel-btn sel-send" id="sel-send-submissions">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 2.5h13l-6.5 5.5-6.5-5.5z"/><path d="M1.5 2.5v9h13v-9"/></svg>
+        Send Message
+      </button>
+      <button type="button" class="sel-btn sel-clear" id="sel-clear-submissions">Clear selection</button>
     </div>
   </div>
 
 <div class="grid-wrapper">
-  <table class="timeline">
+  <table class="timeline" id="table-submissions">
     <thead>
       <tr>
+        <th class="col-check"><input type="checkbox" class="select-all-cb" data-table="table-submissions"></th>
         <th class="col-student">Student</th>
         {% for day in days %}
           <th{% if day == today %} class="col-today"{% endif %}>{{ day.month }}/{{ day.day }}</th>
@@ -520,10 +609,11 @@
       {% set ns = namespace(prev=None) %}
       {% for student in students %}
         {% if ns.prev is not none and ns.prev != student.instr_staleness %}
-          <tr class="tier-separator"><td colspan="{{ days|length + 1 }}"></td></tr>
+          <tr class="tier-separator"><td colspan="{{ days|length + 2 }}"></td></tr>
         {% endif %}
         {% set ns.prev = student.instr_staleness %}
         <tr class="{{ _tier[student.instr_staleness] }}">
+          <td class="col-check"><input type="checkbox" class="row-cb" value="{{ student.canvas_id }}" data-name="{{ student.name | e }}"></td>
           <td class="col-student">
             <div class="student-cell-inner">
               <div class="student-info">
@@ -709,6 +799,63 @@
   });
 
   applyFilters();
+})();
+
+/* ── Student selection / contextual toolbar ────────────────── */
+(function () {
+  // Generic setup: works for whichever tab is active
+  var tables = document.querySelectorAll('table.timeline');
+  tables.forEach(function (table) {
+    var tableId   = table.id;                         // e.g. 'table-timeline'
+    var suffix    = tableId.replace('table-', '');     // e.g. 'timeline'
+    var toolbar   = document.getElementById('toolbar-' + suffix);
+    var countEl   = document.getElementById('sel-count-' + suffix);
+    var sendBtn   = document.getElementById('sel-send-' + suffix);
+    var clearBtn  = document.getElementById('sel-clear-' + suffix);
+    var selectAll = table.querySelector('.select-all-cb');
+    if (!toolbar || !countEl || !selectAll) return;
+
+    function getRowCbs() { return table.querySelectorAll('.row-cb'); }
+
+    function updateToolbar() {
+      var checked = table.querySelectorAll('.row-cb:checked');
+      var n = checked.length;
+      toolbar.classList.toggle('selection-mode', n > 0);
+      countEl.textContent = n + (n === 1 ? ' student selected' : ' students selected');
+      // Sync select-all indeterminate / checked state
+      var total = getRowCbs().length;
+      selectAll.checked       = total > 0 && n === total;
+      selectAll.indeterminate = n > 0 && n < total;
+    }
+
+    // Row checkbox changes
+    table.addEventListener('change', function (e) {
+      if (e.target.classList.contains('row-cb') || e.target.classList.contains('select-all-cb')) {
+        if (e.target.classList.contains('select-all-cb')) {
+          var on = e.target.checked;
+          getRowCbs().forEach(function (cb) { cb.checked = on; });
+        }
+        updateToolbar();
+      }
+    });
+
+    // Clear selection
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+        getRowCbs().forEach(function (cb) { cb.checked = false; });
+        selectAll.checked = false;
+        selectAll.indeterminate = false;
+        updateToolbar();
+      });
+    }
+
+    // Send Message — no-op placeholder
+    if (sendBtn) {
+      sendBtn.addEventListener('click', function () {
+        // Will navigate to group compose in a future iteration
+      });
+    }
+  });
 })();
 </script>
 {% endblock %}
