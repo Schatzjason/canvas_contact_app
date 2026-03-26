@@ -23,6 +23,30 @@ from app.services.sync import run_sync, sync_course
 bp = Blueprint('dashboard', __name__)
 
 
+def fill_placeholders(text, student_context):
+    """Replace placeholder tokens in *text* with values from *student_context*.
+
+    Supported placeholders:
+        <name>  — student's first name
+        <time>  — days since last interaction (e.g. "5 days"), or empty string
+
+    *student_context* is a dict with optional keys:
+        first_name  (str)
+        days_since  (int | None)
+
+    This function is intentionally decoupled from any route so it can be called
+    from any code path that sends a message (compose page, future batch-send, etc.).
+    """
+    first_name = student_context.get('first_name', '')
+    days_since = student_context.get('days_since')
+
+    if first_name:
+        text = text.replace('<name>', first_name)
+    if days_since is not None:
+        text = text.replace('<time>', f'{days_since} days')
+    return text
+
+
 def _get_tz():
     """Return the user's local timezone from the browser-set cookie, falling back to UTC."""
     tz_name = request.cookies.get('tz', '')
@@ -764,9 +788,21 @@ def compose(course_id, student_id):
         if student_enrollment else f'Student {student_id}'
     )
 
+    first_name = student_name.split()[0] if student_name else ''
+    last_at = db.session.query(
+        func.max(InteractionEvent.occurred_at)
+    ).filter(
+        InteractionEvent.course_id == course_id,
+        InteractionEvent.student_canvas_id == student_id,
+    ).scalar()
+    now = datetime.now(timezone.utc)
+    days_since = (now - last_at).days if last_at else None
+
+    student_context = {'first_name': first_name, 'days_since': days_since}
+
     if request.method == 'POST':
-        subject = request.form.get('subject', '').strip()
-        body    = request.form.get('body', '').strip()
+        subject = fill_placeholders(request.form.get('subject', '').strip(), student_context)
+        body    = fill_placeholders(request.form.get('body', '').strip(), student_context)
         try:
             result   = client.send_message(student_id, subject, body, course_id=course_id)
             now      = datetime.now(timezone.utc)
@@ -814,18 +850,8 @@ def compose(course_id, student_id):
             flash(f'Could not send message: {exc}')
         return redirect(url_for('dashboard.student', course_id=course_id, student_id=student_id))
 
-    first_name = student_name.split()[0] if student_name else ''
     default_subject = 'Checking in'
     default_body    = f'Hi {first_name}, ' if first_name else ''
-
-    last_at = db.session.query(
-        func.max(InteractionEvent.occurred_at)
-    ).filter(
-        InteractionEvent.course_id == course_id,
-        InteractionEvent.student_canvas_id == student_id,
-    ).scalar()
-    now = datetime.now(timezone.utc)
-    days_since = (now - last_at).days if last_at else None
 
     templates = MessageTemplate.query.order_by(MessageTemplate.created_at.desc()).all()
 

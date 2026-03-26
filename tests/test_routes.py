@@ -799,3 +799,65 @@ def test_compose_page_shows_templates(client):
     assert response.status_code == 200
     assert b'My Template' in response.data
     assert b'Body text' in response.data
+
+
+# ---------------------------------------------------------------------------
+# fill_placeholders
+# ---------------------------------------------------------------------------
+
+def test_fill_placeholders_replaces_name():
+    from app.routes.dashboard import fill_placeholders
+    result = fill_placeholders('Hi <name>, how are you?', {'first_name': 'Alice'})
+    assert result == 'Hi Alice, how are you?'
+
+
+def test_fill_placeholders_replaces_time():
+    from app.routes.dashboard import fill_placeholders
+    result = fill_placeholders('It has been <time> since we spoke.', {'days_since': 5})
+    assert result == 'It has been 5 days since we spoke.'
+
+
+def test_fill_placeholders_replaces_both():
+    from app.routes.dashboard import fill_placeholders
+    result = fill_placeholders(
+        'Hi <name>, it has been <time>.',
+        {'first_name': 'Bob', 'days_since': 3},
+    )
+    assert result == 'Hi Bob, it has been 3 days.'
+
+
+def test_fill_placeholders_leaves_unknown_tokens():
+    from app.routes.dashboard import fill_placeholders
+    result = fill_placeholders('Hi <name>, check <other>.', {'first_name': 'Zoe'})
+    assert result == 'Hi Zoe, check <other>.'
+
+
+def test_fill_placeholders_no_context():
+    from app.routes.dashboard import fill_placeholders
+    result = fill_placeholders('Hi <name>, <time> ago.', {})
+    assert result == 'Hi <name>, <time> ago.'
+
+
+def test_compose_post_fills_placeholders(client):
+    """POST /compose replaces <name> and <time> placeholders before sending."""
+    _seed_event(days_ago=5)
+    from app.services.canvas_client import CanvasClient as _RealClient
+    with patch('app.routes.dashboard.CanvasClient') as MockClass:
+        MockClass.return_value = _mock_client_with_name('Alice Smith')
+        MockClass.return_value.send_message.return_value = [
+            {'id': 9999, 'last_authored_at': '2026-03-06T12:00:00+00:00'}
+        ]
+        MockClass._make_cache_key.side_effect = _RealClient._make_cache_key
+        client.post(
+            f'/course/{COURSE_ID}/student/{STUDENT_A}/compose',
+            data={'subject': 'Hey <name>', 'body': 'Hi <name>, it has been <time>.'},
+        )
+        args = MockClass.return_value.send_message.call_args
+    sent_subject = args[0][1]
+    sent_body = args[0][2]
+    assert '<name>' not in sent_subject
+    assert 'Alice' in sent_subject
+    assert '<name>' not in sent_body
+    assert 'Alice' in sent_body
+    assert '<time>' not in sent_body
+    assert '5 days' in sent_body
