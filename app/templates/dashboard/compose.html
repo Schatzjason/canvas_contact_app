@@ -126,6 +126,19 @@
   }
   .btn-cancel:hover { border-color: var(--text-secondary); color: var(--text-primary); }
 
+  .btn-save-tpl {
+    padding: 9px 18px;
+    background: none;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    font-family: var(--sans);
+    font-size: 14px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .btn-save-tpl:hover { border-color: var(--text-secondary); color: var(--text-primary); }
+
   .stub-notice {
     display: inline-flex;
     align-items: center;
@@ -136,6 +149,61 @@
     margin-left: 6px;
   }
   .stub-dot { width: 6px; height: 6px; border-radius: 50%; background: #d4a012; flex-shrink: 0; }
+
+  /* ── TEMPLATE LIST ─────────────────────────────────────── */
+  .tpl-section { max-width: 640px; margin-top: 36px; }
+  .tpl-heading {
+    font-family: var(--mono); font-size: 11px; font-weight: 500;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary);
+    margin-bottom: 10px;
+  }
+  .tpl-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 1px; }
+  .tpl-empty { font-size: 13px; color: var(--text-tertiary); }
+  .tpl-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 9px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .tpl-item:hover { border-color: var(--icon-message); }
+  .tpl-name { font-weight: 500; font-size: 13px; flex-shrink: 0; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tpl-preview { font-size: 13px; color: var(--text-tertiary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tpl-date { font-family: var(--mono); font-size: 11px; color: var(--text-tertiary); flex-shrink: 0; }
+  .tpl-delete {
+    background: none; border: none; cursor: pointer;
+    font-size: 14px; color: var(--text-tertiary); padding: 2px 4px; border-radius: 4px;
+    transition: color 0.12s, background 0.12s; flex-shrink: 0;
+  }
+  .tpl-delete:hover { color: var(--accent); background: #fdf0ec; }
+
+  /* ── MODAL ─────────────────────────────────────────────── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+    z-index: 1000; align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface); border-radius: 10px; padding: 28px 32px;
+    width: 400px; max-width: 90vw; box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+  }
+  .modal h2 { font-size: 16px; font-weight: 600; margin-bottom: 18px; }
+  .modal .field { margin-bottom: 18px; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+  .modal-btn-save {
+    padding: 8px 20px; background: var(--icon-message); color: #fff;
+    border: none; border-radius: 6px; font-family: var(--sans); font-size: 14px;
+    font-weight: 500; cursor: pointer; transition: background 0.15s;
+  }
+  .modal-btn-save:hover { background: #2d5cbf; }
+  .modal-btn-cancel {
+    padding: 8px 16px; background: none; color: var(--text-secondary);
+    border: 1px solid var(--border-strong); border-radius: 6px; font-family: var(--sans);
+    font-size: 14px; cursor: pointer; transition: border-color 0.15s, color 0.15s;
+  }
+  .modal-btn-cancel:hover { border-color: var(--text-secondary); color: var(--text-primary); }
 {% endblock %}
 
 {% block content %}
@@ -157,9 +225,42 @@
     </div>
     <div class="form-actions">
       <button type="submit" class="btn-send">Send Message</button>
+      <button type="button" class="btn-save-tpl" id="save-tpl-btn">Save Template</button>
       <a href="{{ url_for('dashboard.student', course_id=course.id, student_id=student_id) }}" class="btn-cancel">Cancel</a>
     </div>
   </form>
+
+  <div class="tpl-section">
+    <div class="tpl-heading">Saved Templates</div>
+    <ul class="tpl-list" id="tpl-list">
+      {% for t in templates %}
+      <li class="tpl-item" data-id="{{ t.id }}" data-subject="{{ t.subject | e }}" data-body="{{ t.body | e }}">
+        <span class="tpl-name">{{ t.name }}</span>
+        <span class="tpl-preview">{{ t.body | truncate(80, True) }}</span>
+        <span class="tpl-date">{{ t.created_at.strftime('%m/%d') }}</span>
+        <button type="button" class="tpl-delete" title="Delete template">&times;</button>
+      </li>
+      {% endfor %}
+    </ul>
+    {% if not templates %}
+    <div class="tpl-empty" id="tpl-empty">No saved templates yet.</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Save Template Modal -->
+<div class="modal-overlay" id="tpl-modal">
+  <div class="modal">
+    <h2>Save Template</h2>
+    <div class="field">
+      <label for="tpl-name">Template Name</label>
+      <input type="text" id="tpl-name" autocomplete="off" placeholder="e.g. Weekly check-in">
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="modal-btn-cancel" id="tpl-modal-cancel">Cancel</button>
+      <button type="button" class="modal-btn-save" id="tpl-modal-save">Save</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -174,6 +275,95 @@
     if (firstName) val = val.replaceAll('<name>', firstName);
     if (timeStr)   val = val.replaceAll('<time>', timeStr);
     ta.value = val;
+  });
+
+  /* ── Save Template Modal ──────────────────────────────── */
+  var modal     = document.getElementById('tpl-modal');
+  var nameInput = document.getElementById('tpl-name');
+
+  document.getElementById('save-tpl-btn').addEventListener('click', function () {
+    nameInput.value = '';
+    modal.classList.add('open');
+    nameInput.focus();
+  });
+
+  function closeModal() { modal.classList.remove('open'); }
+  document.getElementById('tpl-modal-cancel').addEventListener('click', closeModal);
+  modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+
+  document.getElementById('tpl-modal-save').addEventListener('click', function () {
+    var name = nameInput.value.trim();
+    if (!name) { nameInput.focus(); return; }
+    var subject = document.getElementById('subject').value;
+    var body    = document.getElementById('body').value;
+
+    fetch('{{ url_for("dashboard.save_message_template") }}', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name: name, subject: subject, body: body}),
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (!data.ok) return;
+      closeModal();
+      addTemplateRow(data.template);
+    });
+  });
+
+  nameInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('tpl-modal-save').click(); }
+  });
+
+  /* ── Template list interactions ───────────────────────── */
+  function escAttr(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+  function addTemplateRow(t) {
+    var empty = document.getElementById('tpl-empty');
+    if (empty) empty.remove();
+    var li = document.createElement('li');
+    li.className = 'tpl-item';
+    li.dataset.id      = t.id;
+    li.dataset.subject  = t.subject;
+    li.dataset.body     = t.body;
+    var preview = t.body.length > 80 ? t.body.substring(0, 77) + '...' : t.body;
+    li.innerHTML =
+      '<span class="tpl-name">' + escAttr(t.name) + '</span>' +
+      '<span class="tpl-preview">' + escAttr(preview) + '</span>' +
+      '<span class="tpl-date">' + escAttr(t.created_at) + '</span>' +
+      '<button type="button" class="tpl-delete" title="Delete template">&times;</button>';
+    var list = document.getElementById('tpl-list');
+    list.insertBefore(li, list.firstChild);
+  }
+
+  document.getElementById('tpl-list').addEventListener('click', function (e) {
+    // Delete button
+    var delBtn = e.target.closest('.tpl-delete');
+    if (delBtn) {
+      e.stopPropagation();
+      var item = delBtn.closest('.tpl-item');
+      var id = item.dataset.id;
+      fetch('/message-templates/' + id, {method: 'DELETE'})
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.ok) {
+            item.remove();
+            if (!document.querySelector('.tpl-item')) {
+              var empty = document.createElement('div');
+              empty.className = 'tpl-empty';
+              empty.id = 'tpl-empty';
+              empty.textContent = 'No saved templates yet.';
+              document.getElementById('tpl-list').after(empty);
+            }
+          }
+        });
+      return;
+    }
+    // Click row to load template
+    var item = e.target.closest('.tpl-item');
+    if (item) {
+      document.getElementById('subject').value = item.dataset.subject;
+      document.getElementById('body').value    = item.dataset.body;
+    }
   });
 })();
 </script>

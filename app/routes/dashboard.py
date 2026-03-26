@@ -14,6 +14,7 @@ from app.models.canvas_cache import CanvasCache
 from app.models.check_back_date import CheckBackDate
 from app.models.course_display_name import CourseDisplayName
 from app.models.interaction_event import InteractionEvent
+from app.models.message_template import MessageTemplate
 from app.models.pinned_discussion import PinnedDiscussion
 from app.models.student_note import StudentNote
 from app.services.canvas_client import CanvasClient, TTL_CONVERSATIONS
@@ -826,6 +827,8 @@ def compose(course_id, student_id):
     now = datetime.now(timezone.utc)
     days_since = (now - last_at).days if last_at else None
 
+    templates = MessageTemplate.query.order_by(MessageTemplate.created_at.desc()).all()
+
     return render_template('dashboard/compose.html',
         course=course_obj,
         student_id=student_id,
@@ -834,4 +837,35 @@ def compose(course_id, student_id):
         days_since=days_since,
         default_subject=default_subject,
         default_body=default_body,
+        templates=templates,
     )
+
+
+@bp.route('/message-templates', methods=['POST'])
+def save_message_template():
+    data = request.get_json(force=True)
+    name = data.get('name', '').strip()
+    if not name:
+        return {'ok': False, 'error': 'Name is required'}, 400
+    tpl = MessageTemplate(
+        name=name,
+        subject=data.get('subject', '').strip(),
+        body=data.get('body', '').strip(),
+    )
+    db.session.add(tpl)
+    db.session.commit()
+    return {'ok': True, 'template': {
+        'id': tpl.id,
+        'name': tpl.name,
+        'subject': tpl.subject,
+        'body': tpl.body,
+        'created_at': tpl.created_at.strftime('%m/%d'),
+    }}
+
+
+@bp.route('/message-templates/<int:template_id>', methods=['DELETE'])
+def delete_message_template(template_id):
+    tpl = MessageTemplate.query.get_or_404(template_id)
+    db.session.delete(tpl)
+    db.session.commit()
+    return {'ok': True}

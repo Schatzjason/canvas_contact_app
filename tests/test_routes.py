@@ -13,6 +13,7 @@ from app.models.canvas_cache import CanvasCache
 from app.models.course_display_name import CourseDisplayName
 from app.models.check_back_date import CheckBackDate
 from app.models.interaction_event import InteractionEvent
+from app.models.message_template import MessageTemplate
 from app.models.pinned_discussion import PinnedDiscussion
 from app.models.student_note import StudentNote
 
@@ -738,3 +739,63 @@ def test_flush_cache_deletes_entries_and_redirects(client):
 
     assert response.status_code == 302
     assert CanvasCache.query.count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Message templates
+# ---------------------------------------------------------------------------
+
+def test_save_template_creates_row(client):
+    response = client.post(
+        '/message-templates',
+        data=_json.dumps({'name': 'Weekly check-in', 'subject': 'Hi', 'body': 'How are you?'}),
+        content_type='application/json',
+    )
+    assert response.status_code == 200
+    data = _json.loads(response.data)
+    assert data['ok'] is True
+    assert data['template']['name'] == 'Weekly check-in'
+    assert data['template']['subject'] == 'Hi'
+    assert data['template']['body'] == 'How are you?'
+    assert 'created_at' in data['template']
+    assert MessageTemplate.query.count() == 1
+
+
+def test_save_template_rejects_empty_name(client):
+    response = client.post(
+        '/message-templates',
+        data=_json.dumps({'name': '  ', 'subject': 'Hi', 'body': 'body'}),
+        content_type='application/json',
+    )
+    assert response.status_code == 400
+    data = _json.loads(response.data)
+    assert data['ok'] is False
+
+
+def test_delete_template(client):
+    tpl = MessageTemplate(name='Old', subject='S', body='B')
+    db.session.add(tpl)
+    db.session.commit()
+    tpl_id = tpl.id
+
+    response = client.delete(f'/message-templates/{tpl_id}')
+    assert response.status_code == 200
+    data = _json.loads(response.data)
+    assert data['ok'] is True
+    assert MessageTemplate.query.count() == 0
+
+
+def test_delete_template_404(client):
+    response = client.delete('/message-templates/99999')
+    assert response.status_code == 404
+
+
+def test_compose_page_shows_templates(client):
+    db.session.add(MessageTemplate(name='My Template', subject='Subj', body='Body text'))
+    db.session.commit()
+    with patch('app.routes.dashboard.CanvasClient',
+               return_value=_mock_client_with_name('Alice Smith')):
+        response = client.get(f'/course/{COURSE_ID}/student/{STUDENT_A}/compose')
+    assert response.status_code == 200
+    assert b'My Template' in response.data
+    assert b'Body text' in response.data
