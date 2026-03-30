@@ -21,6 +21,10 @@ def _days_ago(n):
     return (datetime.now(timezone.utc) - timedelta(days=n)).isoformat()
 
 
+def _days_from_now(n):
+    return (datetime.now(timezone.utc) + timedelta(days=n)).isoformat()
+
+
 INSTRUCTOR_ID = 500
 
 
@@ -906,3 +910,153 @@ def test_sync_submission_upsert_is_idempotent():
         _run()
 
     assert InteractionEvent.query.filter_by(event_type='submission').count() == first_count
+
+
+# ---------------------------------------------------------------------------
+# Due-date filtering: submissions
+# ---------------------------------------------------------------------------
+
+def test_sync_submission_skips_future_due_assignment():
+    """Assignments due more than 7 days from now are skipped entirely."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        assignments=[
+            {'id': 501, 'name': 'Far Future HW', 'due_at': _days_from_now(30)},
+        ],
+        submissions_by_assignment={501: [{
+            'id': 601, 'user_id': STUDENT_A, 'submitted_at': _days_ago(2),
+            'workflow_state': 'submitted', 'attempt': 1,
+        }]},
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    assert InteractionEvent.query.filter_by(event_type='submission').count() == 0
+    client.get_submissions.assert_not_called()
+
+
+def test_sync_submission_includes_old_due_assignment():
+    """Assignments due before the cutoff are still included (late submissions)."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        assignments=[
+            {'id': 501, 'name': 'Ancient HW', 'due_at': _days_ago(30)},
+        ],
+        submissions_by_assignment={501: [{
+            'id': 601, 'user_id': STUDENT_A, 'submitted_at': _days_ago(2),
+            'workflow_state': 'submitted', 'attempt': 1,
+        }]},
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    assert InteractionEvent.query.filter_by(event_type='submission').count() == 1
+    client.get_submissions.assert_called_once()
+
+
+def test_sync_submission_includes_no_due_date_assignment():
+    """Assignments with no due_at are always included."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        assignments=[
+            {'id': 501, 'name': 'Open-ended HW'},  # no due_at
+        ],
+        submissions_by_assignment={501: [{
+            'id': 601, 'user_id': STUDENT_A, 'submitted_at': _days_ago(2),
+            'workflow_state': 'submitted', 'attempt': 1,
+        }]},
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    assert InteractionEvent.query.filter_by(event_type='submission').count() == 1
+
+
+def test_sync_submission_includes_recent_due_assignment():
+    """Assignments due within the window are fetched normally."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        assignments=[
+            {'id': 501, 'name': 'Recent HW', 'due_at': _days_ago(3)},
+            {'id': 502, 'name': 'Upcoming HW', 'due_at': _days_from_now(5)},
+        ],
+        submissions_by_assignment={
+            501: [{'id': 601, 'user_id': STUDENT_A, 'submitted_at': _days_ago(4),
+                   'workflow_state': 'submitted', 'attempt': 1}],
+            502: [{'id': 602, 'user_id': STUDENT_A, 'submitted_at': _days_ago(1),
+                   'workflow_state': 'submitted', 'attempt': 1}],
+        },
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    assert InteractionEvent.query.filter_by(event_type='submission').count() == 2
+    assert client.get_submissions.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# Due-date filtering: discussions
+# ---------------------------------------------------------------------------
+
+def test_sync_discussion_skips_future_due_topic():
+    """Discussion topics due far in the future are skipped."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        topics=[{'id': 201, 'assignment': {'due_at': _days_from_now(30)}}],
+        entries_by_topic={201: [
+            {'id': 301, 'user_id': STUDENT_A, 'created_at': _days_ago(1), 'recent_replies': []},
+        ]},
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    assert InteractionEvent.query.filter_by(event_type='discussion_entry').count() == 0
+    client.get_discussion_entries.assert_not_called()
+
+
+def test_sync_discussion_skips_old_due_topic():
+    """Discussion topics due before the cutoff are skipped."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        topics=[{'id': 201, 'assignment': {'due_at': _days_ago(30)}}],
+        entries_by_topic={201: [
+            {'id': 301, 'user_id': STUDENT_A, 'created_at': _days_ago(1), 'recent_replies': []},
+        ]},
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    assert InteractionEvent.query.filter_by(event_type='discussion_entry').count() == 0
+    client.get_discussion_entries.assert_not_called()
+
+
+def test_sync_discussion_includes_no_due_date_topic():
+    """Discussion topics with no due date are always included."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        topics=[{'id': 201}],  # no assignment, no lock_at
+        entries_by_topic={201: [
+            {'id': 301, 'user_id': STUDENT_A, 'created_at': _days_ago(1), 'recent_replies': []},
+        ]},
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    assert InteractionEvent.query.filter_by(event_type='discussion_entry').count() == 1
+
+
+def test_sync_discussion_uses_lock_at_when_no_assignment():
+    """Ungraded discussions use lock_at as the effective due date."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        topics=[{'id': 201, 'lock_at': _days_from_now(30)}],
+        entries_by_topic={201: [
+            {'id': 301, 'user_id': STUDENT_A, 'created_at': _days_ago(1), 'recent_replies': []},
+        ]},
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    # lock_at is 30 days from now → too far in the future → skipped
+    assert InteractionEvent.query.filter_by(event_type='discussion_entry').count() == 0
+    client.get_discussion_entries.assert_not_called()

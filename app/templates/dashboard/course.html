@@ -541,6 +541,7 @@
                 {%- set has_hw   = 'submission' in types -%}
                 {%- set disc_msg = disc_messages.get((student.canvas_id, day), '') -%}
                 {%- set msg_txt  = msg_texts.get((student.canvas_id, day), '') -%}
+                {%- set hw_txt   = hw_texts.get((student.canvas_id, day), '') -%}
                 {# ── Collect icons to render ── #}
                 {%- set icons = namespace(list=[]) -%}
                 {%- if has_msg -%}
@@ -557,11 +558,11 @@
                 {%- endif -%}
                 {%- if icons.list|length > 1 -%}
                   <span class="icon-stack">
-                    <span class="icon-wrap icon-{{ icons.list[0] }} icon-back"{% if icons.list[0] == 'disc' and disc_msg %} data-hover-text="{{ disc_msg | e }}"{% elif icons.list[0] == 'msg' and msg_txt %} data-hover-text="{{ msg_txt | e }}"{% endif %}><svg><use href="#ico-{{ icons.list[0] }}"/></svg></span>
-                    <span class="icon-wrap icon-{{ icons.list[1] }} icon-front"{% if icons.list[1] == 'disc' and disc_msg %} data-hover-text="{{ disc_msg | e }}"{% elif icons.list[1] == 'msg' and msg_txt %} data-hover-text="{{ msg_txt | e }}"{% endif %}><svg><use href="#ico-{{ icons.list[1] }}"/></svg></span>
+                    <span class="icon-wrap icon-{{ icons.list[0] }} icon-back"{% if icons.list[0] == 'disc' and disc_msg %} data-hover-text="{{ disc_msg | e }}"{% elif icons.list[0] in ('msg', 'grp') and msg_txt %} data-hover-text="{{ msg_txt | e }}"{% elif icons.list[0] == 'hw' and hw_txt %} data-hover-text="{{ hw_txt | e }}"{% endif %}><svg><use href="#ico-{{ icons.list[0] }}"/></svg></span>
+                    <span class="icon-wrap icon-{{ icons.list[1] }} icon-front"{% if icons.list[1] == 'disc' and disc_msg %} data-hover-text="{{ disc_msg | e }}"{% elif icons.list[1] in ('msg', 'grp') and msg_txt %} data-hover-text="{{ msg_txt | e }}"{% elif icons.list[1] == 'hw' and hw_txt %} data-hover-text="{{ hw_txt | e }}"{% endif %}><svg><use href="#ico-{{ icons.list[1] }}"/></svg></span>
                   </span>
                 {%- elif icons.list|length == 1 -%}
-                  <span class="icon-wrap icon-{{ icons.list[0] }}"{% if icons.list[0] == 'disc' and disc_msg %} data-hover-text="{{ disc_msg | e }}"{% elif icons.list[0] == 'msg' and msg_txt %} data-hover-text="{{ msg_txt | e }}"{% endif %}><svg><use href="#ico-{{ icons.list[0] }}"/></svg></span>
+                  <span class="icon-wrap icon-{{ icons.list[0] }}"{% if icons.list[0] == 'disc' and disc_msg %} data-hover-text="{{ disc_msg | e }}"{% elif icons.list[0] in ('msg', 'grp') and msg_txt %} data-hover-text="{{ msg_txt | e }}"{% elif icons.list[0] == 'hw' and hw_txt %} data-hover-text="{{ hw_txt | e }}"{% endif %}><svg><use href="#ico-{{ icons.list[0] }}"/></svg></span>
                 {%- endif -%}
               {%- endif -%}
             </td>
@@ -652,11 +653,11 @@
                 {%- if has_instr_disc -%}{%- set instr_icons.list = instr_icons.list + ['disc'] -%}{%- endif -%}
                 {%- if instr_icons.list|length > 1 -%}
                   <span class="icon-stack">
-                    <span class="icon-wrap icon-{{ instr_icons.list[0] }} icon-back"{% if instr_icons.list[0] == 'disc' and instr_disc_txt %} data-hover-text="{{ instr_disc_txt | e }}"{% elif instr_icons.list[0] == 'msg' and instr_msg_txt %} data-hover-text="{{ instr_msg_txt | e }}"{% endif %}><svg><use href="#ico-{{ instr_icons.list[0] }}"/></svg></span>
-                    <span class="icon-wrap icon-{{ instr_icons.list[1] }} icon-front"{% if instr_icons.list[1] == 'disc' and instr_disc_txt %} data-hover-text="{{ instr_disc_txt | e }}"{% elif instr_icons.list[1] == 'msg' and instr_msg_txt %} data-hover-text="{{ instr_msg_txt | e }}"{% endif %}><svg><use href="#ico-{{ instr_icons.list[1] }}"/></svg></span>
+                    <span class="icon-wrap icon-{{ instr_icons.list[0] }} icon-back"{% if instr_icons.list[0] == 'disc' and instr_disc_txt %} data-hover-text="{{ instr_disc_txt | e }}"{% elif instr_icons.list[0] in ('msg', 'grp') and instr_msg_txt %} data-hover-text="{{ instr_msg_txt | e }}"{% endif %}><svg><use href="#ico-{{ instr_icons.list[0] }}"/></svg></span>
+                    <span class="icon-wrap icon-{{ instr_icons.list[1] }} icon-front"{% if instr_icons.list[1] == 'disc' and instr_disc_txt %} data-hover-text="{{ instr_disc_txt | e }}"{% elif instr_icons.list[1] in ('msg', 'grp') and instr_msg_txt %} data-hover-text="{{ instr_msg_txt | e }}"{% endif %}><svg><use href="#ico-{{ instr_icons.list[1] }}"/></svg></span>
                   </span>
                 {%- elif instr_icons.list|length == 1 -%}
-                  <span class="icon-wrap icon-{{ instr_icons.list[0] }}"{% if instr_icons.list[0] == 'disc' and instr_disc_txt %} data-hover-text="{{ instr_disc_txt | e }}"{% elif instr_icons.list[0] == 'msg' and instr_msg_txt %} data-hover-text="{{ instr_msg_txt | e }}"{% endif %}><svg><use href="#ico-{{ instr_icons.list[0] }}"/></svg></span>
+                  <span class="icon-wrap icon-{{ instr_icons.list[0] }}"{% if instr_icons.list[0] == 'disc' and instr_disc_txt %} data-hover-text="{{ instr_disc_txt | e }}"{% elif instr_icons.list[0] in ('msg', 'grp') and instr_msg_txt %} data-hover-text="{{ instr_msg_txt | e }}"{% endif %}><svg><use href="#ico-{{ instr_icons.list[0] }}"/></svg></span>
                 {%- endif -%}
               {%- endif -%}
             </td>

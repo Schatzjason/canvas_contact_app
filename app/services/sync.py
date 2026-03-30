@@ -143,6 +143,18 @@ def _phase_student_messages(client, course_id, student_ids, cutoff, progress_q):
     return events
 
 
+def _topic_due_at(topic):
+    """Extract the effective due date from a discussion topic, or None."""
+    # Graded discussions have an embedded assignment with a due_at
+    assignment = topic.get('assignment')
+    if assignment and assignment.get('due_at'):
+        return datetime.fromisoformat(assignment['due_at'])
+    # Ungraded discussions may have a lock_at (closes for new posts)
+    if topic.get('lock_at'):
+        return datetime.fromisoformat(topic['lock_at'])
+    return None
+
+
 def _phase_discussions(client, course_id, student_ids, cutoff, instructor_id, progress_q):
     phase = 'discussions'
     progress_q.put({'status': 'start', 'phase': phase})
@@ -150,7 +162,18 @@ def _phase_discussions(client, course_id, student_ids, cutoff, instructor_id, pr
     events = []
     matched = 0
     try:
-        topics = client.get_discussion_topics(course_id)
+        all_topics = client.get_discussion_topics(course_id)
+
+        # Only fetch entries for topics that are relevant: due date is
+        # between the cutoff and a week from now.  Topics with no due date
+        # are always included (could have activity at any time).
+        future_limit = datetime.now(timezone.utc) + timedelta(days=7)
+        topics = []
+        for t in all_topics:
+            due = _topic_due_at(t)
+            if due is None or (due >= cutoff and due <= future_limit):
+                topics.append(t)
+
         for i, topic in enumerate(topics, 1):
             progress_q.put({'status': 'page', 'phase': phase, 'n': i,
                             'total': len(topics), 'topic': topic.get('title', '')})
@@ -205,10 +228,22 @@ def _phase_submissions(client, course_id, student_ids, cutoff, progress_q):
     try:
         all_assignments = client.get_assignments(course_id)
         skip_types = {'discussion_topic', 'online_quiz'}
-        assignments = [
-            a for a in all_assignments
-            if not skip_types.intersection(a.get('submission_types', []))
-        ]
+
+        # Skip assignments due more than a week in the future — no submissions
+        # expected yet.  Past assignments are always included because students
+        # frequently submit late work.  Assignments with no due date are kept.
+        future_limit = datetime.now(timezone.utc) + timedelta(days=7)
+        assignments = []
+        for a in all_assignments:
+            if skip_types.intersection(a.get('submission_types', [])):
+                continue
+            due_str = a.get('due_at')
+            if due_str:
+                due = datetime.fromisoformat(due_str)
+                if due > future_limit:
+                    continue
+            assignments.append(a)
+
         for i, assignment in enumerate(assignments, 1):
             progress_q.put({'status': 'page', 'phase': phase, 'n': i,
                             'total': len(assignments),

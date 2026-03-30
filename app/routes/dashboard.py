@@ -338,6 +338,7 @@ def course(course_id):
     disc_source_ids       = {}  # {(student_id, date): [source_id, ...]}
     msg_source_ids        = {}  # {(student_id, date): [source_id, ...]}
     instr_disc_source_ids = {}  # {(student_id, date): [source_id, ...]}
+    hw_source_ids         = {}  # {(student_id, date): [source_id, ...]}
     for event in InteractionEvent.query.filter(
         InteractionEvent.course_id == course_id,
         InteractionEvent.occurred_at >= window_start_dt,
@@ -351,6 +352,8 @@ def course(course_id):
             msg_source_ids.setdefault((sid, day), []).append(event.source_id)
         if event.event_type == 'discussion_instructor_reply':
             instr_disc_source_ids.setdefault((sid, day), []).append(event.source_id)
+        if event.event_type == 'submission':
+            hw_source_ids.setdefault((sid, day), []).append(event.source_id)
 
     # Fetch discussion message text from the canvas cache
     disc_messages = {}
@@ -424,6 +427,57 @@ def course(course_id):
             if texts:
                 instr_disc_messages[(sid, day)] = '\n\n---\n\n'.join(texts)
 
+    # Fetch assignment name + due date for submission hover text
+    hw_texts = {}
+    all_hw_ids = [src for ids in hw_source_ids.values() for src in ids]
+    if all_hw_ids:
+        # Step 1: map submission source_id → assignment_id via submission caches.
+        # Submission cache entries contain arrays of objects with 'id' and
+        # 'assignment_id'.  Filter to rows that have an assignment_id and
+        # whose id matches one of our submission source IDs.
+        rows = db.session.execute(text("""
+            SELECT (s->>'id')::bigint AS sub_id,
+                   (s->>'assignment_id')::bigint AS assignment_id
+            FROM canvas_cache,
+                 jsonb_array_elements(response_json::jsonb) AS s
+            WHERE (s->>'assignment_id') IS NOT NULL
+              AND (s->>'id')::bigint = ANY(:ids)
+        """), {'ids': all_hw_ids}).fetchall()
+        sub_to_assignment = {r.sub_id: r.assignment_id for r in rows if r.assignment_id}
+
+        # Step 2: get assignment details from the assignments cache
+        assignment_ids = set(sub_to_assignment.values())
+        if assignment_ids:
+            a_rows = db.session.execute(text("""
+                SELECT (a->>'id')::bigint AS aid,
+                       a->>'name' AS name,
+                       a->>'due_at' AS due_at
+                FROM canvas_cache,
+                     jsonb_array_elements(response_json::jsonb) AS a
+                WHERE (a->>'id')::bigint = ANY(:ids)
+            """), {'ids': list(assignment_ids)}).fetchall()
+            assignment_info = {}
+            for r in a_rows:
+                parts = [r.name] if r.name else []
+                if r.due_at:
+                    try:
+                        due_dt = datetime.fromisoformat(r.due_at).astimezone(tz)
+                        parts.append(f'Due {due_dt.month}/{due_dt.day}')
+                    except (ValueError, TypeError):
+                        pass
+                assignment_info[r.aid] = ' — '.join(parts) if parts else ''
+
+            hw_by_source = {}
+            for sub_id, aid in sub_to_assignment.items():
+                if aid in assignment_info:
+                    hw_by_source[sub_id] = assignment_info[aid]
+
+            for (sid, day), source_ids in hw_source_ids.items():
+                texts = [hw_by_source[s] for s in source_ids if s in hw_by_source]
+                if texts:
+                    # Deduplicate — multiple submissions for same assignment on same day
+                    hw_texts[(sid, day)] = '\n'.join(dict.fromkeys(texts))
+
     def _staleness(last_date):
         if last_date is None:
             return None, 'red'
@@ -482,6 +536,7 @@ def course(course_id):
         disc_messages=disc_messages,
         msg_texts=msg_texts,
         instr_disc_messages=instr_disc_messages,
+        hw_texts=hw_texts,
         active_tab=active_tab,
     )
 
