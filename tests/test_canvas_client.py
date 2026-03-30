@@ -188,6 +188,55 @@ def test_stream_conversations_cache_hit_ignores_since():
     assert results == [([{'id': 42}], True)]
 
 
+def test_stream_conversations_skips_stale_cache_when_since_provided():
+    """When since is provided and the cache is older than SYNC_CACHE_MAX_AGE,
+    the cache should be skipped and a live fetch should happen."""
+    cache_key = CanvasClient._make_cache_key('/api/v1/conversations', {'scope': 'inbox'})
+    now = datetime.now(timezone.utc)
+    # Cache entry fetched 5 minutes ago — older than SYNC_CACHE_MAX_AGE (120s)
+    db.session.add(CanvasCache(
+        cache_key=cache_key,
+        response_json=[{'id': 99, 'last_message_at': '2026-03-01T00:00:00+00:00'}],
+        fetched_at=now - timedelta(minutes=5),
+        ttl_seconds=7200,
+    ))
+    db.session.commit()
+
+    # Live data has a timestamp AFTER the since date so it passes the cutoff filter
+    since = now - timedelta(minutes=6)
+    live_ts = (now - timedelta(minutes=1)).strftime('%Y-%m-%dT%H:%M:%S+00:00')
+    live_data = [{'id': 200, 'last_message_at': live_ts}]
+    with patch('requests.get', return_value=_mock_response(live_data)):
+        client = CanvasClient()
+        results = list(client.stream_conversations(since=since, scope='inbox'))
+
+    # Should have fetched live — not returned the stale cache
+    assert len(results) == 1
+    page, is_cached = results[0]
+    assert is_cached is False
+    assert page[0]['id'] == 200
+
+
+def test_stream_conversations_uses_fresh_cache_without_since():
+    """When since is NOT provided, the normal TTL applies and the cache is used
+    even if it is several minutes old."""
+    cache_key = CanvasClient._make_cache_key('/api/v1/conversations', {'scope': 'inbox'})
+    db.session.add(CanvasCache(
+        cache_key=cache_key,
+        response_json=[{'id': 99}],
+        fetched_at=datetime.now(timezone.utc) - timedelta(minutes=5),
+        ttl_seconds=7200,
+    ))
+    db.session.commit()
+
+    with patch('requests.get') as mock_get:
+        client = CanvasClient()
+        results = list(client.stream_conversations(scope='inbox'))
+
+    mock_get.assert_not_called()
+    assert results == [([{'id': 99}], True)]
+
+
 def test_enrollment_cache_key_matches_canvas_client():
     """_enrollment_cache_key in sync.py must produce the same digest as
     CanvasClient._make_cache_key with the same path and params — they must

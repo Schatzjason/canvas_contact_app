@@ -29,6 +29,7 @@
     --tier-ok-bg: #f2f8f4;
     --tier-ok-dot: #5a9e6e;
     --icon-message: #3b6fd4;
+    --icon-group: #1a8a6a;
     --icon-discussion: #7c4dba;
     --icon-homework: #5a5a5a;
     --nav-bg: #1a1915;
@@ -189,6 +190,7 @@
 
   /* Hide icons in grid when their type is unchecked */
   .grid-wrapper.hide-msg  .icon-msg,
+  .grid-wrapper.hide-grp  .icon-grp,
   .grid-wrapper.hide-disc .icon-disc,
   .grid-wrapper.hide-hw   .icon-hw   { display: none; }
   /* When all children in a stack are hidden, collapse the stack */
@@ -214,6 +216,9 @@
 
   /* Message */
   .icon-msg  { background: #eef3fc; color: var(--icon-message);    border: 2px solid var(--icon-message); }
+
+  /* Group message */
+  .icon-grp  { background: #e8f5f0; color: var(--icon-group);     border: 2px solid var(--icon-group); }
 
   /* Discussion */
   .icon-disc { background: #f3eefb; color: var(--icon-discussion); border: 2px solid var(--icon-discussion); }
@@ -531,6 +536,7 @@
             <td{% if day == today %} class="col-today"{% endif %}>
               {%- if types -%}
                 {%- set has_msg  = 'student_message' in types -%}
+                {%- set has_grp  = 'group_conversation' in types -%}
                 {%- set has_disc = 'discussion_entry' in types or 'discussion_reply' in types -%}
                 {%- set has_hw   = 'submission' in types -%}
                 {%- set disc_msg = disc_messages.get((student.canvas_id, day), '') -%}
@@ -539,6 +545,9 @@
                 {%- set icons = namespace(list=[]) -%}
                 {%- if has_msg -%}
                   {%- set icons.list = icons.list + ['msg'] -%}
+                {%- endif -%}
+                {%- if has_grp -%}
+                  {%- set icons.list = icons.list + ['grp'] -%}
                 {%- endif -%}
                 {%- if has_disc -%}
                   {%- set icons.list = icons.list + ['disc'] -%}
@@ -577,6 +586,9 @@
         <div class="divider"></div>
         <div class="legend-item">
           <span class="icon-wrap icon-msg"><svg><use href="#ico-msg"/></svg></span>Message sent
+        </div>
+        <div class="legend-item">
+          <span class="icon-wrap icon-grp"><svg><use href="#ico-grp"/></svg></span>Group message
         </div>
         <div class="legend-item">
           <span class="icon-wrap icon-disc"><svg><use href="#ico-disc"/></svg></span>Discussion reply
@@ -630,18 +642,21 @@
             <td{% if day == today %} class="col-today"{% endif %}>
               {%- if types -%}
                 {%- set has_instr_msg  = 'conversation' in types -%}
+                {%- set has_instr_grp  = 'group_conversation' in types -%}
                 {%- set has_instr_disc = 'discussion_instructor_reply' in types -%}
                 {%- set instr_msg_txt  = msg_texts.get((student.canvas_id, day), '') -%}
                 {%- set instr_disc_txt = instr_disc_messages.get((student.canvas_id, day), '') -%}
-                {%- if has_instr_msg and has_instr_disc -%}
+                {%- set instr_icons = namespace(list=[]) -%}
+                {%- if has_instr_msg -%}{%- set instr_icons.list = instr_icons.list + ['msg'] -%}{%- endif -%}
+                {%- if has_instr_grp -%}{%- set instr_icons.list = instr_icons.list + ['grp'] -%}{%- endif -%}
+                {%- if has_instr_disc -%}{%- set instr_icons.list = instr_icons.list + ['disc'] -%}{%- endif -%}
+                {%- if instr_icons.list|length > 1 -%}
                   <span class="icon-stack">
-                    <span class="icon-wrap icon-disc icon-back"{% if instr_disc_txt %} data-hover-text="{{ instr_disc_txt | e }}"{% endif %}><svg><use href="#ico-disc"/></svg></span>
-                    <span class="icon-wrap icon-msg icon-front"{% if instr_msg_txt %} data-hover-text="{{ instr_msg_txt | e }}"{% endif %}><svg><use href="#ico-msg"/></svg></span>
+                    <span class="icon-wrap icon-{{ instr_icons.list[0] }} icon-back"{% if instr_icons.list[0] == 'disc' and instr_disc_txt %} data-hover-text="{{ instr_disc_txt | e }}"{% elif instr_icons.list[0] == 'msg' and instr_msg_txt %} data-hover-text="{{ instr_msg_txt | e }}"{% endif %}><svg><use href="#ico-{{ instr_icons.list[0] }}"/></svg></span>
+                    <span class="icon-wrap icon-{{ instr_icons.list[1] }} icon-front"{% if instr_icons.list[1] == 'disc' and instr_disc_txt %} data-hover-text="{{ instr_disc_txt | e }}"{% elif instr_icons.list[1] == 'msg' and instr_msg_txt %} data-hover-text="{{ instr_msg_txt | e }}"{% endif %}><svg><use href="#ico-{{ instr_icons.list[1] }}"/></svg></span>
                   </span>
-                {%- elif has_instr_msg -%}
-                  <span class="icon-wrap icon-msg"{% if instr_msg_txt %} data-hover-text="{{ instr_msg_txt | e }}"{% endif %}><svg><use href="#ico-msg"/></svg></span>
-                {%- elif has_instr_disc -%}
-                  <span class="icon-wrap icon-disc"{% if instr_disc_txt %} data-hover-text="{{ instr_disc_txt | e }}"{% endif %}><svg><use href="#ico-disc"/></svg></span>
+                {%- elif instr_icons.list|length == 1 -%}
+                  <span class="icon-wrap icon-{{ instr_icons.list[0] }}"{% if instr_icons.list[0] == 'disc' and instr_disc_txt %} data-hover-text="{{ instr_disc_txt | e }}"{% elif instr_icons.list[0] == 'msg' and instr_msg_txt %} data-hover-text="{{ instr_msg_txt | e }}"{% endif %}><svg><use href="#ico-{{ instr_icons.list[0] }}"/></svg></span>
                 {%- endif -%}
               {%- endif -%}
             </td>
@@ -849,10 +864,15 @@
       });
     }
 
-    // Send Message — no-op placeholder
+    // Send Message — navigate to group compose with selected student IDs
     if (sendBtn) {
       sendBtn.addEventListener('click', function () {
-        // Will navigate to group compose in a future iteration
+        var checked = table.querySelectorAll('.row-cb:checked');
+        if (!checked.length) return;
+        var ids = [];
+        checked.forEach(function (cb) { ids.push(cb.value); });
+        var url = '/course/' + {{ course.id | tojson }} + '/group-compose?students=' + ids.join(',');
+        window.location.href = url;
       });
     }
   });

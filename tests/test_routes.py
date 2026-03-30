@@ -385,6 +385,16 @@ def test_student_page_unknown_student_still_200(client):
     assert response.status_code == 200
 
 
+def test_student_page_shows_group_conversation_icon(client):
+    """A group_conversation event should render the group message icon on the timeline."""
+    _seed_event(days_ago=1, event_type='group_conversation', source_id=7001)
+    with patch('app.routes.dashboard.CanvasClient', return_value=_mock_client_with_name()):
+        response = client.get(f'/course/{COURSE_ID}/student/{STUDENT_A}')
+    html = response.data.decode()
+    assert 'ico-grp' in html
+    assert 'Group message' in html
+
+
 # ---------------------------------------------------------------------------
 # Notes (save_note endpoint)
 # ---------------------------------------------------------------------------
@@ -897,3 +907,149 @@ def test_compose_post_fills_placeholders(client):
     assert 'Alice' in sent_body
     assert '<time>' not in sent_body
     assert '5 days' in sent_body
+
+
+# ---------------------------------------------------------------------------
+# Group compose
+# ---------------------------------------------------------------------------
+
+def _mock_group_client():
+    """Mock with two enrolled students."""
+    return _mock_client(enrollments=[
+        {'user_id': STUDENT_A, 'user': {'name': 'Alice Smith', 'sortable_name': 'Smith, Alice'}},
+        {'user_id': STUDENT_B, 'user': {'name': 'Bob Jones', 'sortable_name': 'Jones, Bob'}},
+    ])
+
+
+def test_group_compose_get_200(client):
+    with patch('app.routes.dashboard.CanvasClient', return_value=_mock_group_client()):
+        response = client.get(f'/course/{COURSE_ID}/group-compose?students={STUDENT_A},{STUDENT_B}')
+    assert response.status_code == 200
+    assert b'Alice Smith' in response.data
+    assert b'Bob Jones' in response.data
+    assert b'2 students' in response.data.lower()
+
+
+def test_group_compose_get_no_students_redirects(client):
+    with patch('app.routes.dashboard.CanvasClient', return_value=_mock_group_client()):
+        response = client.get(f'/course/{COURSE_ID}/group-compose')
+    assert response.status_code == 302
+
+
+def test_group_compose_post_sends_to_each_student(client):
+    from app.services.canvas_client import CanvasClient as _RealClient
+    with patch('app.routes.dashboard.CanvasClient') as MockClass:
+        mock = _mock_group_client()
+        mock.send_message.side_effect = [
+            [{'id': 5001, 'last_authored_at': '2026-03-06T12:00:00+00:00'}],
+            [{'id': 5002, 'last_authored_at': '2026-03-06T12:00:00+00:00'}],
+        ]
+        MockClass.return_value = mock
+        MockClass._make_cache_key.side_effect = _RealClient._make_cache_key
+        response = client.post(
+            f'/course/{COURSE_ID}/group-compose',
+            data={
+                'students': f'{STUDENT_A},{STUDENT_B}',
+                'subject': 'Checking in',
+                'body': 'Hi <name>,',
+            },
+        )
+    assert response.status_code == 302
+    # Should have called send_message once per student
+    assert mock.send_message.call_count == 2
+
+
+def test_group_compose_post_creates_group_conversation_events(client):
+    from app.services.canvas_client import CanvasClient as _RealClient
+    with patch('app.routes.dashboard.CanvasClient') as MockClass:
+        mock = _mock_group_client()
+        mock.send_message.side_effect = [
+            [{'id': 5001, 'last_authored_at': '2026-03-06T12:00:00+00:00'}],
+            [{'id': 5002, 'last_authored_at': '2026-03-06T12:00:00+00:00'}],
+        ]
+        MockClass.return_value = mock
+        MockClass._make_cache_key.side_effect = _RealClient._make_cache_key
+        client.post(
+            f'/course/{COURSE_ID}/group-compose',
+            data={
+                'students': f'{STUDENT_A},{STUDENT_B}',
+                'subject': 'Hi',
+                'body': 'Hello',
+            },
+        )
+    events = InteractionEvent.query.filter_by(event_type='group_conversation').all()
+    assert len(events) == 2
+    # Both should share the same group_id
+    assert events[0].group_id is not None
+    assert events[0].group_id == events[1].group_id
+    # Different students
+    student_ids = {e.student_canvas_id for e in events}
+    assert student_ids == {STUDENT_A, STUDENT_B}
+
+
+def test_group_compose_post_fills_placeholders_per_student(client):
+    _seed_event(days_ago=3, student_id=STUDENT_A, source_id=3001)
+    from app.services.canvas_client import CanvasClient as _RealClient
+    with patch('app.routes.dashboard.CanvasClient') as MockClass:
+        mock = _mock_group_client()
+        mock.send_message.side_effect = [
+            [{'id': 5001, 'last_authored_at': '2026-03-06T12:00:00+00:00'}],
+            [{'id': 5002, 'last_authored_at': '2026-03-06T12:00:00+00:00'}],
+        ]
+        MockClass.return_value = mock
+        MockClass._make_cache_key.side_effect = _RealClient._make_cache_key
+        client.post(
+            f'/course/{COURSE_ID}/group-compose',
+            data={
+                'students': f'{STUDENT_A},{STUDENT_B}',
+                'subject': 'Hi <name>',
+                'body': 'Hello <name>, it has been <time>.',
+            },
+        )
+    # First call should be for STUDENT_A (Alice), second for STUDENT_B (Bob)
+    call_args = mock.send_message.call_args_list
+    # Alice
+    assert 'Alice' in call_args[0][0][1]  # subject
+    assert 'Alice' in call_args[0][0][2]  # body
+    assert '3 days' in call_args[0][0][2]
+    # Bob — no events seeded, so <time> should remain as-is
+    assert 'Bob' in call_args[1][0][1]
+    assert 'Bob' in call_args[1][0][2]
+
+
+def test_group_compose_post_invalidates_inbox_cache(client):
+    """Sending group messages should invalidate the inbox cache so the next
+    sync picks up student replies immediately."""
+    from app.services.canvas_client import CanvasClient as _RealClient
+    inbox_key = _RealClient._make_cache_key('/api/v1/conversations', {'scope': 'inbox'})
+    db.session.add(CanvasCache(
+        cache_key=inbox_key,
+        response_json=[{'id': 1}],
+        fetched_at=datetime.now(timezone.utc),
+        ttl_seconds=7200,
+    ))
+    db.session.commit()
+    assert CanvasCache.query.filter_by(cache_key=inbox_key).count() == 1
+
+    with patch('app.routes.dashboard.CanvasClient') as MockClass:
+        mock = _mock_group_client()
+        mock.send_message.return_value = [
+            {'id': 5001, 'last_authored_at': '2026-03-06T12:00:00+00:00'}
+        ]
+        MockClass.return_value = mock
+        MockClass._make_cache_key.side_effect = _RealClient._make_cache_key
+        client.post(
+            f'/course/{COURSE_ID}/group-compose',
+            data={'students': str(STUDENT_A), 'subject': 'Hi', 'body': 'Hello'},
+        )
+
+    assert CanvasCache.query.filter_by(cache_key=inbox_key).count() == 0
+
+
+def test_group_compose_shows_templates(client):
+    from app.models.message_template import MessageTemplate as MT
+    db.session.add(MT(name='Group Tpl', subject='S', body='B'))
+    db.session.commit()
+    with patch('app.routes.dashboard.CanvasClient', return_value=_mock_group_client()):
+        response = client.get(f'/course/{COURSE_ID}/group-compose?students={STUDENT_A}')
+    assert b'Group Tpl' in response.data

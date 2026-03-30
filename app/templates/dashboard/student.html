@@ -25,6 +25,7 @@
     --text-tertiary: #9b9893;
     --accent: #c44b1e;
     --icon-message: #3b6fd4;
+    --icon-group: #1a8a6a;
     --icon-discussion: #7c4dba;
     --mono: 'IBM Plex Mono', monospace;
     --sans: 'IBM Plex Sans', sans-serif;
@@ -359,6 +360,7 @@
   .icon-wrap svg { width: 15px; height: 15px; }
   .icon-msg         { background: #eef3fc; color: var(--icon-message);    border: 2px solid var(--icon-message); }
   .icon-msg.student { border-style: dashed; }
+  .icon-grp          { background: #e8f5f0; color: var(--icon-group);      border: 2px solid var(--icon-group); }
   .icon-disc         { background: #f3eefb; color: var(--icon-discussion); border: 2px solid var(--icon-discussion); }
   .icon-disc.student { border-style: dashed; }
   .icon-wrap:hover { transform: scale(1.15) translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,0.16); }
@@ -528,34 +530,24 @@
           <div class="tl-icons">
             {%- if types -%}
               {%- set has_instr_msg  = 'conversation' in types -%}
+              {%- set has_grp_msg    = 'group_conversation' in types -%}
               {%- set has_stud_msg   = 'student_message' in types -%}
               {%- set has_stud_disc  = 'discussion_entry' in types or 'discussion_reply' in types -%}
               {%- set has_instr_disc = 'discussion_instructor_reply' in types -%}
-              {%- set has_any_msg    = has_instr_msg or has_stud_msg -%}
-              {%- set has_any_disc   = has_stud_disc or has_instr_disc -%}
-              {%- if has_any_msg and has_any_disc -%}
+              {# Collect icons: each distinct type that is present gets one icon #}
+              {%- set icons = namespace(list=[]) -%}
+              {%- if has_instr_msg -%}{%- set icons.list = icons.list + [('msg', 'Instructor message')] -%}{%- endif -%}
+              {%- if has_grp_msg -%}{%- set icons.list = icons.list + [('grp', 'Group message')] -%}{%- endif -%}
+              {%- if has_stud_msg -%}{%- set icons.list = icons.list + [('msg student', 'Student message')] -%}{%- endif -%}
+              {%- if has_instr_disc -%}{%- set icons.list = icons.list + [('disc', 'Instructor discussion reply')] -%}{%- endif -%}
+              {%- if has_stud_disc -%}{%- set icons.list = icons.list + [('disc student', 'Student discussion')] -%}{%- endif -%}
+              {%- if icons.list | length > 1 -%}
                 <span class="icon-stack">
-                  <span class="icon-wrap icon-disc{% if not has_instr_disc %} student{% endif %} icon-back"><svg><use href="#ico-disc"/></svg></span>
-                  <span class="icon-wrap icon-msg{% if not has_instr_msg %} student{% endif %} icon-front"><svg><use href="#ico-msg"/></svg></span>
+                  <span class="icon-wrap icon-{{ icons.list[1][0] }} icon-back" title="{{ icons.list[1][1] }}"><svg><use href="#ico-{{ icons.list[1][0].split()[0] }}"/></svg></span>
+                  <span class="icon-wrap icon-{{ icons.list[0][0] }} icon-front" title="{{ icons.list[0][1] }}"><svg><use href="#ico-{{ icons.list[0][0].split()[0] }}"/></svg></span>
                 </span>
-              {%- elif has_instr_msg and has_stud_msg -%}
-                <span class="icon-stack">
-                  <span class="icon-wrap icon-msg student icon-back"><svg><use href="#ico-msg"/></svg></span>
-                  <span class="icon-wrap icon-msg icon-front"><svg><use href="#ico-msg"/></svg></span>
-                </span>
-              {%- elif has_instr_msg -%}
-                <span class="icon-wrap icon-msg" title="Instructor message"><svg><use href="#ico-msg"/></svg></span>
-              {%- elif has_stud_msg -%}
-                <span class="icon-wrap icon-msg student" title="Student message"><svg><use href="#ico-msg"/></svg></span>
-              {%- elif has_instr_disc and has_stud_disc -%}
-                <span class="icon-stack">
-                  <span class="icon-wrap icon-disc student icon-back"><svg><use href="#ico-disc"/></svg></span>
-                  <span class="icon-wrap icon-disc icon-front"><svg><use href="#ico-disc"/></svg></span>
-                </span>
-              {%- elif has_instr_disc -%}
-                <span class="icon-wrap icon-disc" title="Instructor replied to discussion"><svg><use href="#ico-disc"/></svg></span>
-              {%- elif has_stud_disc -%}
-                <span class="icon-wrap icon-disc student" title="Student discussion"><svg><use href="#ico-disc"/></svg></span>
+              {%- elif icons.list | length == 1 -%}
+                <span class="icon-wrap icon-{{ icons.list[0][0] }}" title="{{ icons.list[0][1] }}"><svg><use href="#ico-{{ icons.list[0][0].split()[0] }}"/></svg></span>
               {%- endif -%}
             {%- endif -%}
           </div>

@@ -1,5 +1,6 @@
 import json
 import re
+import uuid
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -319,7 +320,7 @@ def course(course_id):
     }
 
     # Last instructor-initiated interaction date per student
-    instructor_event_types = ('conversation', 'discussion_instructor_reply')
+    instructor_event_types = ('conversation', 'group_conversation', 'discussion_instructor_reply')
     last_instr_by_student = {
         row.student_canvas_id: row.last_at.astimezone(tz).date()
         for row in db.session.query(
@@ -346,7 +347,7 @@ def course(course_id):
         active_days_by_student.setdefault(sid, {}).setdefault(day, set()).add(event.event_type)
         if event.event_type in ('discussion_entry', 'discussion_reply'):
             disc_source_ids.setdefault((sid, day), []).append(event.source_id)
-        if event.event_type in ('conversation', 'student_message'):
+        if event.event_type in ('conversation', 'group_conversation', 'student_message'):
             msg_source_ids.setdefault((sid, day), []).append(event.source_id)
         if event.event_type == 'discussion_instructor_reply':
             instr_disc_source_ids.setdefault((sid, day), []).append(event.source_id)
@@ -534,7 +535,7 @@ def student(course_id, student_id):
     instr_disc_ids = [s for (d, et), ss in event_source_ids.items()
                       if et == 'discussion_instructor_reply' for s in ss]
     msg_ids = [s for (d, et), ss in event_source_ids.items()
-               if et in ('conversation', 'student_message') for s in ss]
+               if et in ('conversation', 'group_conversation', 'student_message') for s in ss]
 
     disc_text_by_src = {}
     if disc_ids:
@@ -601,6 +602,10 @@ def student(course_id, student_id):
 
         for s in event_source_ids.get((day, 'conversation'), []):
             sections.append({'label': 'Instructor Message',
+                             'text': conv_text_by_src.get(s, '')})
+
+        for s in event_source_ids.get((day, 'group_conversation'), []):
+            sections.append({'label': 'Group Message',
                              'text': conv_text_by_src.get(s, '')})
 
         for s in event_source_ids.get((day, 'student_message'), []):
@@ -863,6 +868,122 @@ def compose(course_id, student_id):
         days_since=days_since,
         default_subject=default_subject,
         default_body=default_body,
+        templates=templates,
+    )
+
+
+@bp.route('/course/<int:course_id>/group-compose', methods=['GET', 'POST'])
+def group_compose(course_id):
+    client = CanvasClient()
+
+    try:
+        course_obj = client.get_course(course_id)
+    except Exception as exc:
+        flash(f'Could not load course info: {exc}')
+        course_obj = {'name': f'Course {course_id}', 'course_code': '', 'id': course_id}
+
+    try:
+        enrollments = client.get_enrollments(course_id)
+    except Exception as exc:
+        flash(f'Could not load enrollments: {exc}')
+        enrollments = []
+
+    enrollment_by_id = {e['user_id']: e for e in enrollments}
+
+    # Parse student IDs from query param (GET) or hidden field (POST)
+    raw_ids = request.args.get('students', '') if request.method == 'GET' else request.form.get('students', '')
+    student_ids = []
+    for part in raw_ids.split(','):
+        part = part.strip()
+        if part.isdigit():
+            student_ids.append(int(part))
+
+    if not student_ids:
+        flash('No students selected.')
+        return redirect(url_for('dashboard.course', course_id=course_id))
+
+    # Build recipient list with names
+    recipients = []
+    for sid in student_ids:
+        enr = enrollment_by_id.get(sid)
+        name = enr['user'].get('name', f'Student {sid}') if enr else f'Student {sid}'
+        recipients.append({'id': sid, 'name': name})
+
+    if request.method == 'POST':
+        subject = request.form.get('subject', '').strip()
+        body_template = request.form.get('body', '').strip()
+        gid = str(uuid.uuid4())
+        now = datetime.now(timezone.utc)
+        sent_count = 0
+        events = []
+
+        for recip in recipients:
+            first_name = recip['name'].split()[0] if recip['name'] else ''
+            last_at = db.session.query(
+                func.max(InteractionEvent.occurred_at)
+            ).filter(
+                InteractionEvent.course_id == course_id,
+                InteractionEvent.student_canvas_id == recip['id'],
+            ).scalar()
+            days_since = (now - last_at).days if last_at else None
+            ctx = {'first_name': first_name, 'days_since': days_since}
+            filled_subject = fill_placeholders(subject, ctx)
+            filled_body = fill_placeholders(body_template, ctx)
+
+            try:
+                result = client.send_message(recip['id'], filled_subject, filled_body, course_id=course_id)
+                new_conv = result[0] if isinstance(result, list) and result else None
+                if new_conv:
+                    ts_str = new_conv.get('last_authored_at') or new_conv.get('last_message_at')
+                    occurred_at = datetime.fromisoformat(ts_str) if ts_str else now
+                    events.append({
+                        'course_id': course_id,
+                        'student_canvas_id': recip['id'],
+                        'event_type': 'group_conversation',
+                        'occurred_at': occurred_at,
+                        'source_id': new_conv['id'],
+                        'group_id': gid,
+                    })
+                sent_count += 1
+            except Exception as exc:
+                current_app.logger.error('group send failed for %s: %s', recip['id'], exc)
+                flash(f'Could not send to {recip["name"]}: {exc}')
+
+        if events:
+            stmt = pg_insert(InteractionEvent.__table__).values(events)
+            stmt = stmt.on_conflict_do_update(
+                constraint='uq_interaction_event_type_source_student',
+                set_={
+                    'occurred_at': stmt.excluded.occurred_at,
+                    'group_id': stmt.excluded.group_id,
+                },
+            )
+            db.session.execute(stmt)
+
+        # Invalidate conversation caches so next sync picks up new messages
+        # and any replies that follow shortly after.
+        sent_key = CanvasClient._make_cache_key('/api/v1/conversations', {'scope': 'sent'})
+        inbox_key = CanvasClient._make_cache_key('/api/v1/conversations', {'scope': 'inbox'})
+        CanvasCache.query.filter(
+            CanvasCache.cache_key.in_([sent_key, inbox_key])
+        ).delete()
+
+        db.session.commit()
+        flash(f'Message sent to {sent_count} of {len(recipients)} students.')
+        return redirect(url_for('dashboard.course', course_id=course_id))
+
+    display_name = CourseDisplayName.query.filter_by(course_id=course_id).first()
+    display_name = display_name.name if display_name else course_obj.get('name', f'Course {course_id}')
+
+    templates = MessageTemplate.query.order_by(MessageTemplate.created_at.desc()).all()
+
+    return render_template('dashboard/group_compose.html',
+        course=course_obj,
+        display_name=display_name,
+        recipients=recipients,
+        student_ids=','.join(str(s) for s in student_ids),
+        default_subject='Checking in',
+        default_body='Hi <name>, ',
         templates=templates,
     )
 

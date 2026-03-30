@@ -162,12 +162,18 @@ class CanvasClient:
             ttl=TTL_CONVERSATIONS,
         )
 
+    # When stream_conversations is called with a since date (sync context),
+    # only trust the cache if it was fetched very recently.  The normal 2-hour
+    # TTL is too long — a student reply that arrives between the cache snapshot
+    # and the next sync would be invisible until the TTL expires.
+    SYNC_CACHE_MAX_AGE = 120  # seconds
+
     def stream_conversations(self, since=None, scope='sent'):
         """Generator that yields pages of conversations one at a time.
 
         scope: 'sent' for instructor-sent, 'inbox' for received (student-initiated).
 
-        The cache key is stable (scope only — no since date), so the 24 h cache
+        The cache key is stable (scope only — no since date), so the cache
         is not invalidated when the since window changes between syncs.
 
         Yields (page, is_cached):
@@ -178,10 +184,21 @@ class CanvasClient:
         """
         # Stable key: only scope, not since — so cache survives between syncs
         cache_key = self._make_cache_key('/api/v1/conversations', {'scope': scope})
-        cached = self._cache_read(cache_key)
-        if cached is not None:
-            yield cached, True
-            return
+        try:
+            entry = CanvasCache.query.filter_by(cache_key=cache_key).first()
+            if entry and entry.is_fresh():
+                if since is not None:
+                    # Sync context: only trust cache if very recently fetched,
+                    # otherwise we'd miss messages that arrived after the snapshot.
+                    age = (datetime.now(timezone.utc) - entry.fetched_at).total_seconds()
+                    use_cache = age < self.SYNC_CACHE_MAX_AGE
+                else:
+                    use_cache = True
+                if use_cache:
+                    yield entry.response_json, True
+                    return
+        except Exception:
+            pass  # fall through to live fetch
 
         api_params = {'scope': scope}
         if since is not None:
