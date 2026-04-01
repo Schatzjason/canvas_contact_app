@@ -392,6 +392,11 @@
   .search-result:last-child { border-bottom: none; }
   .search-result:hover { background: #fafaf8; }
   .search-result-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+  .search-dropped-tag {
+    font-family: var(--mono); font-size: 9px; color: var(--tier-hot-dot);
+    background: var(--tier-hot-bg); padding: 1px 5px; border-radius: 3px;
+    margin-left: 6px; letter-spacing: 0.03em;
+  }
   .search-result-section { font-family: var(--mono); font-size: 11px; color: var(--text-tertiary); letter-spacing: 0.04em; }
   .search-empty { padding: 12px 14px; font-size: 13px; color: var(--text-tertiary); }
 {% endblock %}
@@ -965,7 +970,9 @@ document.querySelectorAll('.cb-row-link').forEach(function (row) {
       a.className = 'search-result';
       a.href = '/course/' + s.course_id + '/student/' + s.student_id;
       a.innerHTML =
-        '<span class="search-result-name">' + escHtml(s.name) + '</span>' +
+        '<span class="search-result-name">' + escHtml(s.name) +
+        (s.dropped ? ' <span class="search-dropped-tag">dropped</span>' : '') +
+        '</span>' +
         '<span class="search-result-section">' + escHtml(s.section) + '</span>';
       results.appendChild(a);
     });

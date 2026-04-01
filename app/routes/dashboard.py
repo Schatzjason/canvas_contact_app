@@ -18,6 +18,7 @@ from app.models.interaction_event import InteractionEvent
 from app.models.message_template import MessageTemplate
 from app.models.pinned_discussion import PinnedDiscussion
 from app.models.student_note import StudentNote
+from app.models.student_record import StudentRecord
 from app.services.canvas_client import CanvasClient, TTL_CONVERSATIONS
 from app.services.sync import run_sync, sync_course
 
@@ -168,6 +169,14 @@ def index():
             except Exception:
                 pass
 
+        # Fill in names for dropped students from StudentRecord
+        missing_keys = {(cb.course_id, cb.student_canvas_id) for cb in all_cb} - set(student_name_map.keys())
+        if missing_keys:
+            for cid, sid in missing_keys:
+                rec = StudentRecord.query.filter_by(course_id=cid, student_canvas_id=sid).first()
+                if rec:
+                    student_name_map[(cid, sid)] = rec.sortable_name
+
         days_of_week = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
         for cb in all_cb:
             check_back_rows.append({
@@ -195,6 +204,7 @@ def index():
             enrs = client.get_enrollments(c['id'])
         except Exception:
             enrs = []
+        enrolled_ids = set()
         for e in enrs:
             u = e.get('user', {})
             search_students.append({
@@ -202,7 +212,23 @@ def index():
                 'section': section,
                 'course_id': c['id'],
                 'student_id': e['user_id'],
+                'dropped': False,
             })
+            enrolled_ids.add(e['user_id'])
+
+        # Include dropped students in search results
+        dropped = StudentRecord.query.filter_by(
+            course_id=c['id'], status='dropped',
+        ).all()
+        for rec in dropped:
+            if rec.student_canvas_id not in enrolled_ids:
+                search_students.append({
+                    'name': rec.sortable_name,
+                    'section': section,
+                    'course_id': rec.course_id,
+                    'student_id': rec.student_canvas_id,
+                    'dropped': True,
+                })
 
     return render_template('dashboard/index.html',
         courses=courses,
@@ -564,9 +590,14 @@ def student(course_id, student_id):
         user = student_enrollment.get('user', {})
         student_name = user.get('name', f'Student {student_id}')
         student_score = student_enrollment.get('grades', {}).get('current_score')
+        is_dropped = False
     else:
-        student_name = f'Student {student_id}'
+        rec = StudentRecord.query.filter_by(
+            course_id=course_id, student_canvas_id=student_id
+        ).first()
+        student_name = rec.name if rec else f'Student {student_id}'
         student_score = None
+        is_dropped = rec.status == 'dropped' if rec else False
 
     tz = _get_tz()
     today = datetime.now(tz).date()
@@ -734,6 +765,7 @@ def student(course_id, student_id):
         note_content=note_content,
         check_back_date=check_back_date,
         check_back_note=check_back_note,
+        is_dropped=is_dropped,
     )
 
 
@@ -843,10 +875,11 @@ def compose(course_id, student_id):
     student_enrollment = next(
         (e for e in enrollments if e['user_id'] == student_id), None
     )
-    student_name = (
-        student_enrollment['user'].get('name', f'Student {student_id}')
-        if student_enrollment else f'Student {student_id}'
-    )
+    if student_enrollment:
+        student_name = student_enrollment['user'].get('name', f'Student {student_id}')
+    else:
+        rec = StudentRecord.query.filter_by(course_id=course_id, student_canvas_id=student_id).first()
+        student_name = rec.name if rec else f'Student {student_id}'
 
     first_name = student_name.split()[0] if student_name else ''
     last_at = db.session.query(
@@ -961,7 +994,11 @@ def group_compose(course_id):
     recipients = []
     for sid in student_ids:
         enr = enrollment_by_id.get(sid)
-        name = enr['user'].get('name', f'Student {sid}') if enr else f'Student {sid}'
+        if enr:
+            name = enr['user'].get('name', f'Student {sid}')
+        else:
+            rec = StudentRecord.query.filter_by(course_id=course_id, student_canvas_id=sid).first()
+            name = rec.name if rec else f'Student {sid}'
         recipients.append({'id': sid, 'name': name})
 
     if request.method == 'POST':

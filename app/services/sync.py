@@ -10,7 +10,9 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app import db
 from app.models.canvas_cache import CanvasCache
+from app.models.check_back_date import CheckBackDate
 from app.models.interaction_event import InteractionEvent
+from app.models.student_record import StudentRecord
 from app.services.canvas_client import CanvasClient
 
 # Stored as CanvasCache rows with these keys; cleared automatically when user flushes cache.
@@ -317,6 +319,52 @@ def sync_course(course_id):
         return
     yield {'status': 'done_phase', 'phase': phase, 'count': len(student_ids),
            'elapsed_ms': int((time.perf_counter() - t0) * 1000)}
+
+    # ── Upsert student records and detect drops ─────────────────────────────
+    if enrollments:
+        records = []
+        for e in enrollments:
+            u = e.get('user', {})
+            records.append({
+                'course_id': course_id,
+                'student_canvas_id': e['user_id'],
+                'name': u.get('name', f'Student {e["user_id"]}'),
+                'sortable_name': u.get('sortable_name') or u.get('name', f'Student {e["user_id"]}'),
+                'status': 'active',
+                'dropped_at': None,
+            })
+        stmt = pg_insert(StudentRecord.__table__).values(records)
+        stmt = stmt.on_conflict_do_update(
+            constraint='uq_student_record',
+            set_={
+                'name': stmt.excluded.name,
+                'sortable_name': stmt.excluded.sortable_name,
+                'status': 'active',
+                'dropped_at': None,
+            },
+        )
+        db.session.execute(stmt)
+
+    # Mark students no longer in the enrollment as dropped
+    now_utc = datetime.now(timezone.utc)
+    newly_dropped = StudentRecord.query.filter(
+        StudentRecord.course_id == course_id,
+        StudentRecord.status == 'active',
+        ~StudentRecord.student_canvas_id.in_(student_ids) if student_ids else True,
+    ).all()
+    for rec in newly_dropped:
+        rec.status = 'dropped'
+        rec.dropped_at = now_utc
+
+    # Remove check-back dates for dropped students
+    if newly_dropped:
+        dropped_ids = [rec.student_canvas_id for rec in newly_dropped]
+        CheckBackDate.query.filter(
+            CheckBackDate.course_id == course_id,
+            CheckBackDate.student_canvas_id.in_(dropped_ids),
+        ).delete(synchronize_session=False)
+
+    db.session.commit()
 
     if not student_ids:
         yield {'status': 'done', 'count': 0, 'students': 0,

@@ -16,6 +16,7 @@ from app.models.interaction_event import InteractionEvent
 from app.models.message_template import MessageTemplate
 from app.models.pinned_discussion import PinnedDiscussion
 from app.models.student_note import StudentNote
+from app.models.student_record import StudentRecord
 
 COURSE_ID = 99
 STUDENT_A = 101
@@ -26,16 +27,19 @@ STUDENT_B = 102
 # Helpers
 # ---------------------------------------------------------------------------
 
+_DEFAULT_ENROLLMENTS = [
+    {'user_id': STUDENT_A, 'user': {'sortable_name': 'Smith, Alice'},
+     'grades': {'current_score': None}},
+]
+
+
 def _mock_client(enrollments=None):
     """Return a pre-configured CanvasClient mock."""
     mock = MagicMock()
     mock.get_course.return_value = {
         'id': COURSE_ID, 'name': 'Test Course', 'course_code': 'CS101',
     }
-    mock.get_enrollments.return_value = enrollments or [
-        {'user_id': STUDENT_A, 'user': {'sortable_name': 'Smith, Alice'},
-         'grades': {'current_score': None}},
-    ]
+    mock.get_enrollments.return_value = _DEFAULT_ENROLLMENTS if enrollments is None else enrollments
     mock.get_discussion_entries.return_value = []
     mock.get_courses.return_value = [
         {'id': COURSE_ID, 'name': 'Test Course', 'course_code': 'CS101', 'term': None},
@@ -1053,3 +1057,63 @@ def test_group_compose_shows_templates(client):
     with patch('app.routes.dashboard.CanvasClient', return_value=_mock_group_client()):
         response = client.get(f'/course/{COURSE_ID}/group-compose?students={STUDENT_A}')
     assert b'Group Tpl' in response.data
+
+
+# ---------------------------------------------------------------------------
+# Dropped student support
+# ---------------------------------------------------------------------------
+
+def test_student_detail_shows_dropped_name(client):
+    """Student detail page shows the real name for a dropped student."""
+    db.session.add(StudentRecord(
+        course_id=COURSE_ID, student_canvas_id=STUDENT_A,
+        name='Alice Smith', sortable_name='Smith, Alice', status='dropped',
+    ))
+    db.session.commit()
+    # Mock returns enrollments that do NOT include STUDENT_A
+    mock = _mock_client(enrollments=[])
+    mock.get_discussion_entries.return_value = []
+    with patch('app.routes.dashboard.CanvasClient', return_value=mock):
+        response = client.get(f'/course/{COURSE_ID}/student/{STUDENT_A}')
+    assert response.status_code == 200
+    assert b'Alice Smith' in response.data
+    assert b'Dropped' in response.data
+
+
+def test_student_detail_no_dropped_badge_for_active(client):
+    with patch('app.routes.dashboard.CanvasClient',
+               return_value=_mock_client_with_name('Alice Smith')):
+        response = client.get(f'/course/{COURSE_ID}/student/{STUDENT_A}')
+    assert b'>Dropped<' not in response.data
+
+
+def test_index_search_includes_dropped_student(client):
+    db.session.add(StudentRecord(
+        course_id=COURSE_ID, student_canvas_id=999,
+        name='Zara Dropped', sortable_name='Dropped, Zara', status='dropped',
+    ))
+    db.session.commit()
+    with patch('app.routes.dashboard.CanvasClient') as MockClient:
+        MockClient.return_value.get_courses.return_value = [
+            {'id': COURSE_ID, 'name': 'Test Course', 'course_code': 'CS101', 'term': None},
+        ]
+        MockClient.return_value.get_enrollments.return_value = []
+        response = client.get('/')
+    html = response.data.decode()
+    assert 'Dropped, Zara' in html
+    assert 'dropped' in html.lower()
+
+
+def test_compose_shows_dropped_student_name(client):
+    """Compose page for a dropped student shows their real name."""
+    db.session.add(StudentRecord(
+        course_id=COURSE_ID, student_canvas_id=STUDENT_A,
+        name='Alice Smith', sortable_name='Smith, Alice', status='dropped',
+    ))
+    db.session.commit()
+    mock = _mock_client(enrollments=[])
+    mock.get_discussion_entries.return_value = []
+    with patch('app.routes.dashboard.CanvasClient', return_value=mock):
+        response = client.get(f'/course/{COURSE_ID}/student/{STUDENT_A}/compose')
+    assert response.status_code == 200
+    assert b'Alice Smith' in response.data

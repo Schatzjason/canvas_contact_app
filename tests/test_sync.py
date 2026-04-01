@@ -9,7 +9,9 @@ from unittest.mock import MagicMock, patch
 
 from app import db
 from app.models.canvas_cache import CanvasCache
+from app.models.check_back_date import CheckBackDate
 from app.models.interaction_event import InteractionEvent
+from app.models.student_record import StudentRecord
 from app.services.sync import sync_course
 
 COURSE_ID = 99
@@ -1060,3 +1062,140 @@ def test_sync_discussion_uses_lock_at_when_no_assignment():
     # lock_at is 30 days from now → too far in the future → skipped
     assert InteractionEvent.query.filter_by(event_type='discussion_entry').count() == 0
     client.get_discussion_entries.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Student records: upsert and drop detection
+# ---------------------------------------------------------------------------
+
+def _enrollment(user_id, name='Alice Smith', sortable_name='Smith, Alice'):
+    return {'user_id': user_id, 'user': {'name': name, 'sortable_name': sortable_name}}
+
+
+def test_sync_creates_student_records():
+    client = _make_client(enrollments=[
+        _enrollment(STUDENT_A, 'Alice Smith', 'Smith, Alice'),
+        _enrollment(STUDENT_B, 'Bob Jones', 'Jones, Bob'),
+    ])
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    records = StudentRecord.query.filter_by(course_id=COURSE_ID).all()
+    assert len(records) == 2
+    by_id = {r.student_canvas_id: r for r in records}
+    assert by_id[STUDENT_A].name == 'Alice Smith'
+    assert by_id[STUDENT_A].status == 'active'
+    assert by_id[STUDENT_B].sortable_name == 'Jones, Bob'
+
+
+def test_sync_detects_dropped_student():
+    # First sync: both students enrolled
+    client = _make_client(enrollments=[
+        _enrollment(STUDENT_A), _enrollment(STUDENT_B),
+    ])
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    # Second sync: only A enrolled — B should be marked dropped
+    client2 = _make_client(enrollments=[_enrollment(STUDENT_A)])
+    with patch('app.services.sync.CanvasClient', return_value=client2):
+        _run()
+
+    rec_b = StudentRecord.query.filter_by(
+        course_id=COURSE_ID, student_canvas_id=STUDENT_B
+    ).first()
+    assert rec_b.status == 'dropped'
+    assert rec_b.dropped_at is not None
+    # A should still be active
+    rec_a = StudentRecord.query.filter_by(
+        course_id=COURSE_ID, student_canvas_id=STUDENT_A
+    ).first()
+    assert rec_a.status == 'active'
+
+
+def test_sync_removes_check_back_for_dropped():
+    # First sync to create records
+    client = _make_client(enrollments=[
+        _enrollment(STUDENT_A), _enrollment(STUDENT_B),
+    ])
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    # Seed a check-back date for B
+    from datetime import date
+    db.session.add(CheckBackDate(
+        course_id=COURSE_ID, student_canvas_id=STUDENT_B,
+        date=date(2026, 4, 10),
+    ))
+    db.session.commit()
+    assert CheckBackDate.query.filter_by(student_canvas_id=STUDENT_B).count() == 1
+
+    # Second sync: B dropped
+    client2 = _make_client(enrollments=[_enrollment(STUDENT_A)])
+    with patch('app.services.sync.CanvasClient', return_value=client2):
+        _run()
+
+    assert CheckBackDate.query.filter_by(student_canvas_id=STUDENT_B).count() == 0
+
+
+def test_sync_reactivates_re_enrolled_student():
+    # First sync
+    client = _make_client(enrollments=[
+        _enrollment(STUDENT_A), _enrollment(STUDENT_B),
+    ])
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    # Drop B
+    client2 = _make_client(enrollments=[_enrollment(STUDENT_A)])
+    with patch('app.services.sync.CanvasClient', return_value=client2):
+        _run()
+    assert StudentRecord.query.filter_by(
+        course_id=COURSE_ID, student_canvas_id=STUDENT_B
+    ).first().status == 'dropped'
+
+    # Re-enroll B
+    client3 = _make_client(enrollments=[
+        _enrollment(STUDENT_A), _enrollment(STUDENT_B),
+    ])
+    with patch('app.services.sync.CanvasClient', return_value=client3):
+        _run()
+
+    rec = StudentRecord.query.filter_by(
+        course_id=COURSE_ID, student_canvas_id=STUDENT_B
+    ).first()
+    assert rec.status == 'active'
+    assert rec.dropped_at is None
+
+
+def test_sync_updates_name_on_change():
+    client = _make_client(enrollments=[
+        _enrollment(STUDENT_A, 'Alice Smith', 'Smith, Alice'),
+    ])
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    # Name changed in Canvas
+    client2 = _make_client(enrollments=[
+        _enrollment(STUDENT_A, 'Alice Jones', 'Jones, Alice'),
+    ])
+    with patch('app.services.sync.CanvasClient', return_value=client2):
+        _run()
+
+    rec = StudentRecord.query.filter_by(
+        course_id=COURSE_ID, student_canvas_id=STUDENT_A
+    ).first()
+    assert rec.name == 'Alice Jones'
+    assert rec.sortable_name == 'Jones, Alice'
+
+
+def test_sync_first_run_no_false_drops():
+    """On first sync with no existing records, no one should be marked dropped."""
+    client = _make_client(enrollments=[
+        _enrollment(STUDENT_A), _enrollment(STUDENT_B),
+    ])
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    dropped = StudentRecord.query.filter_by(status='dropped').count()
+    assert dropped == 0

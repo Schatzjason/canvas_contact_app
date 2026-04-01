@@ -68,6 +68,11 @@
   .staleness-dot.yellow { background: #d4a012; }
   .staleness-dot.red    { background: #e8705a; }
   .days-ago { font-family: var(--mono); font-size: 12px; color: var(--text-secondary); }
+  .dropped-badge {
+    font-family: var(--mono); font-size: 10px; font-weight: 500;
+    color: #c0392b; background: #fef2f0; border: 1px solid #f0c4be;
+    padding: 2px 8px; border-radius: 4px; letter-spacing: 0.04em; text-transform: uppercase;
+  }
   .student-score-label { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-top: 6px; }
 
   .compose-btn {
@@ -450,6 +455,7 @@
     <div class="student-label">{{ course.course_code }}</div>
     <div class="name-row">
       <h1>{{ student_name }}</h1>
+      {% if is_dropped %}<span class="dropped-badge">Dropped</span>{% endif %}
       <span class="staleness-dot {{ staleness }}"></span>
       <span class="days-ago">
         {%- if days_since is none %}no contact
