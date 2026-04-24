@@ -1080,6 +1080,49 @@ def group_compose(course_id):
     )
 
 
+@bp.route('/course/<int:course_id>/group-check-back', methods=['POST'])
+def save_group_check_back(course_id):
+    data = request.get_json(force=True)
+    date_str = data.get('date', '').strip()
+    note_str = data.get('note', '').strip()[:60]
+    raw_ids = data.get('students', '')
+    student_ids = [int(p) for p in str(raw_ids).split(',') if p.strip().isdigit()]
+
+    if not student_ids:
+        return {'ok': False, 'error': 'No students specified.'}, 400
+
+    # Empty date = clear all
+    if not date_str:
+        CheckBackDate.query.filter(
+            CheckBackDate.course_id == course_id,
+            CheckBackDate.student_canvas_id.in_(student_ids),
+        ).delete()
+        db.session.commit()
+        return {'ok': True, 'date': '', 'note': ''}
+
+    try:
+        parsed = date.fromisoformat(date_str)
+    except ValueError:
+        return {'ok': False, 'error': 'Invalid date format. Use YYYY-MM-DD.'}, 400
+
+    for sid in student_ids:
+        row = CheckBackDate.query.filter_by(
+            course_id=course_id, student_canvas_id=sid,
+        ).first()
+        if row:
+            row.date = parsed
+            row.note = note_str
+        else:
+            db.session.add(CheckBackDate(
+                course_id=course_id,
+                student_canvas_id=sid,
+                date=parsed,
+                note=note_str,
+            ))
+    db.session.commit()
+    return {'ok': True, 'date': parsed.isoformat(), 'note': note_str}
+
+
 @bp.route('/message-templates', methods=['POST'])
 def save_message_template():
     data = request.get_json(force=True)
