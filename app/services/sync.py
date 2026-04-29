@@ -298,7 +298,25 @@ def sync_course(course_id):
     app = current_app._get_current_object()
     client = CanvasClient()
     today = datetime.now(timezone.utc).date()
-    cutoff = datetime(today.year, today.month, today.day, tzinfo=timezone.utc) - timedelta(days=21)
+    # Sync the whole term so late submissions from way-behind students are
+    # captured. Falls back to a generous 365-day window if Canvas returns no
+    # course start_at. The cutoff applies to event timestamps (sent/posted/
+    # submitted), not assignment due dates — late work submitted today still
+    # appears regardless of how old the assignment is.
+    try:
+        course_obj = client.get_course(course_id)
+        start_str = course_obj.get('start_at')
+    except Exception:
+        start_str = None
+    if start_str:
+        try:
+            cutoff = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+        except (ValueError, TypeError):
+            cutoff = datetime(today.year, today.month, today.day,
+                              tzinfo=timezone.utc) - timedelta(days=365)
+    else:
+        cutoff = datetime(today.year, today.month, today.day,
+                          tzinfo=timezone.utc) - timedelta(days=365)
     t_start = time.perf_counter()
 
     # ── Phase: enrollments (serial — must complete before parallel phases) ──

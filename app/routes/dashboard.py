@@ -19,6 +19,7 @@ from app.models.message_template import MessageTemplate
 from app.models.pinned_discussion import PinnedDiscussion
 from app.models.student_note import StudentNote
 from app.models.student_record import StudentRecord
+from app.services.by_module import build_by_module_view
 from app.services.canvas_client import CanvasClient, TTL_CONVERSATIONS
 from app.services.course_modules import recompute_course_modules
 from app.services.sync import run_sync, sync_course
@@ -761,6 +762,13 @@ def student(course_id, student_id):
     check_back_date = cb_row.date.isoformat() if cb_row else ''
     check_back_note = cb_row.note if cb_row else ''
 
+    try:
+        by_module = build_by_module_view(course_id, student_id, tz)
+    except Exception as exc:
+        current_app.logger.warning('by_module render failed: %s', exc)
+        by_module = {'modules': [], 'columns': [], 'rows': [],
+                     'drawer_payload': {}, 'has_modules': False}
+
     return render_template('dashboard/student.html',
         course=course_obj,
         student_id=student_id,
@@ -778,6 +786,7 @@ def student(course_id, student_id):
         check_back_date=check_back_date,
         check_back_note=check_back_note,
         is_dropped=is_dropped,
+        by_module=by_module,
     )
 
 

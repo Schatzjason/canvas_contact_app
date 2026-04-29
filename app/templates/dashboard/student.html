@@ -27,6 +27,8 @@
     --icon-message: #3b6fd4;
     --icon-group: #1a8a6a;
     --icon-discussion: #7c4dba;
+    --icon-submit: #6b6760;
+    --icon-submit-bg: #f0eee8;
     --mono: 'IBM Plex Mono', monospace;
     --sans: 'IBM Plex Sans', sans-serif;
     --nav-bg: #1a1915;
@@ -447,6 +449,60 @@
     word-break: break-word;
   }
   .drawer-section-text.empty { color: var(--text-tertiary); font-style: italic; }
+
+  /* ── BY MODULE ───────────────────────────────────────────── */
+  .by-module {
+    display: grid;
+    column-gap: 0;
+    row-gap: 0;
+    align-items: stretch;
+    margin-top: 4px;
+  }
+  .bm-col-header {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-align: center;
+    padding-bottom: 12px;
+  }
+  .bm-module-cell { text-align: right; padding: 14px 14px 14px 0; }
+  .bm-module-name { font-size: 13px; font-weight: 500; color: var(--text-primary); line-height: 1.3; }
+  .bm-module-date { font-family: var(--mono); font-size: 10px; color: var(--text-tertiary); margin-top: 2px; }
+  .bm-data-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 4px;
+    min-height: 56px;
+  }
+  .bm-data-cell.has-events { cursor: pointer; }
+  .bm-data-cell.has-events:hover .icon-wrap { filter: brightness(1.05); }
+
+  /* Submission icon (added: not present in earlier icon system above) */
+  .icon-sub      { background: var(--icon-submit-bg); color: var(--icon-submit); border: 2px solid var(--icon-submit); }
+  .icon-sub.late { opacity: 0.55; }
+
+  /* Stack — front top-left, subsequent layers offset down-right by 6px.
+     Distinct from .icon-stack used by the timeline (different sizing). */
+  .bm-stack { position: relative; display: inline-block; flex-shrink: 0; }
+  .bm-stack.size-2 { width: 38px; height: 38px; }
+  .bm-stack.size-3 { width: 44px; height: 44px; }
+  .bm-stack .layer { position: absolute; }
+  .bm-stack .layer.front { top: 0;  left: 0;  z-index: 3; }
+  .bm-stack .layer.mid   { top: 6px; left: 6px; z-index: 2; }
+  .bm-stack .layer.back  { top: 12px; left: 12px; z-index: 1; }
+  .bm-stack.size-2 .layer.back { top: 6px; left: 6px; z-index: 1; }
+  .bm-stack-row { display: flex; align-items: center; gap: 7px; }
+  .bm-stack-overflow {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .bm-empty { font-family: var(--mono); font-size: 11px; color: var(--text-tertiary); padding: 12px 0; }
 {% endblock %}
 
 {% block content %}
@@ -523,7 +579,60 @@
   </div>
 
   <div class="section">
-    <div class="section-title">Last 21 Days</div>
+    <div class="section-title">By Module</div>
+    {% if not by_module.has_modules %}
+      <div class="bm-empty">No modules synced for this course yet.</div>
+    {% else %}
+      {%- set col_count = by_module.columns | length -%}
+      <div class="by-module"
+           style="grid-template-columns: 160px repeat({{ col_count }}, minmax(70px, 1fr));">
+        <div></div>
+        {% for col in by_module.columns %}
+          <div class="bm-col-header">{{ col.label }}</div>
+        {% endfor %}
+
+        {% for row in by_module.rows %}
+          <div class="bm-module-cell">
+            <div class="bm-module-name">{{ row.module.name }}</div>
+            <div class="bm-module-date">{{ row.module.short_date }}</div>
+          </div>
+          {% for cell in row.cells %}
+            {%- set events = cell.events -%}
+            {%- set count = events | length -%}
+            <div class="bm-data-cell {% if count %}has-events{% endif %}"
+                 {% if count %}data-cell-id="{{ cell.cell_id }}"{% endif %}>
+              {%- if count == 1 -%}
+                <span class="icon-wrap {{ events[0].icon_class }}"><svg><use href="#ico-{{ events[0].glyph }}"/></svg></span>
+              {%- elif count == 2 -%}
+                <span class="bm-stack size-2">
+                  <span class="layer back"><span class="icon-wrap {{ events[1].icon_class }}"><svg><use href="#ico-{{ events[1].glyph }}"/></svg></span></span>
+                  <span class="layer front"><span class="icon-wrap {{ events[0].icon_class }}"><svg><use href="#ico-{{ events[0].glyph }}"/></svg></span></span>
+                </span>
+              {%- elif count == 3 -%}
+                <span class="bm-stack size-3">
+                  <span class="layer back"><span class="icon-wrap {{ events[2].icon_class }}"><svg><use href="#ico-{{ events[2].glyph }}"/></svg></span></span>
+                  <span class="layer mid"><span class="icon-wrap {{ events[1].icon_class }}"><svg><use href="#ico-{{ events[1].glyph }}"/></svg></span></span>
+                  <span class="layer front"><span class="icon-wrap {{ events[0].icon_class }}"><svg><use href="#ico-{{ events[0].glyph }}"/></svg></span></span>
+                </span>
+              {%- elif count >= 4 -%}
+                <div class="bm-stack-row">
+                  <span class="bm-stack size-3">
+                    <span class="layer back"><span class="icon-wrap {{ events[2].icon_class }}"><svg><use href="#ico-{{ events[2].glyph }}"/></svg></span></span>
+                    <span class="layer mid"><span class="icon-wrap {{ events[1].icon_class }}"><svg><use href="#ico-{{ events[1].glyph }}"/></svg></span></span>
+                    <span class="layer front"><span class="icon-wrap {{ events[0].icon_class }}"><svg><use href="#ico-{{ events[0].glyph }}"/></svg></span></span>
+                  </span>
+                  <span class="bm-stack-overflow">+{{ cell.overflow }}</span>
+                </div>
+              {%- endif -%}
+            </div>
+          {% endfor %}
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="section">
+    <div class="section-title">Recent Activity</div>
     <div class="timeline">
       {% for day in days | reverse %}
         {%- set types = active_days.get(day) -%}
@@ -662,21 +771,18 @@
 
 <script>
 const DRAWER_DATA = {{ day_drawer | tojson }};
+const CELL_DRAWER_DATA = {{ by_module.drawer_payload | tojson }};
 
 (function () {
   const drawer  = document.getElementById('detail-drawer');
   const dateEl  = document.getElementById('drawer-date');
   const bodyEl  = document.getElementById('drawer-body');
   const closeBtn = document.getElementById('drawer-close');
-  let openDay = null;
+  let openKey = null;
 
-  function openDrawer(day) {
-    const data = DRAWER_DATA[day];
-    if (!data) return;
-
-    dateEl.textContent = data.date_label;
+  function renderSections(sections) {
     bodyEl.innerHTML = '';
-    data.sections.forEach(function(sec) {
+    sections.forEach(function(sec) {
       const wrap = document.createElement('div');
       const label = document.createElement('div');
       label.className = 'drawer-section-label';
@@ -688,42 +794,55 @@ const DRAWER_DATA = {{ day_drawer | tojson }};
       wrap.appendChild(text);
       bodyEl.appendChild(wrap);
     });
+  }
 
+  function openDayDrawer(day) {
+    const data = DRAWER_DATA[day];
+    if (!data) return;
+    dateEl.textContent = data.date_label;
+    renderSections(data.sections);
     drawer.classList.add('open');
     drawer.setAttribute('aria-hidden', 'false');
-    openDay = day;
+    openKey = 'day:' + day;
+  }
+
+  function openCellDrawer(cellId) {
+    const data = CELL_DRAWER_DATA[cellId];
+    if (!data) return;
+    dateEl.textContent = data.header;
+    renderSections(data.sections);
+    drawer.classList.add('open');
+    drawer.setAttribute('aria-hidden', 'false');
+    openKey = 'cell:' + cellId;
   }
 
   function closeDrawer() {
     drawer.classList.remove('open');
     drawer.setAttribute('aria-hidden', 'true');
-    openDay = null;
+    openKey = null;
   }
 
-  // Click on icons area
   document.addEventListener('click', function(e) {
-    // Close button
     if (closeBtn.contains(e.target)) { closeDrawer(); return; }
-
-    // Click inside open drawer — do nothing
     if (drawer.contains(e.target)) return;
 
-    // Click on a timeline icon
     const row = e.target.closest('.tl-row.tl-active');
     if (row && row.dataset.day) {
-      if (openDay === row.dataset.day) {
-        closeDrawer();
-      } else {
-        openDrawer(row.dataset.day);
-      }
+      const k = 'day:' + row.dataset.day;
+      if (openKey === k) closeDrawer(); else openDayDrawer(row.dataset.day);
       return;
     }
 
-    // Click outside everything — close
+    const cell = e.target.closest('.bm-data-cell.has-events');
+    if (cell && cell.dataset.cellId) {
+      const k = 'cell:' + cell.dataset.cellId;
+      if (openKey === k) closeDrawer(); else openCellDrawer(cell.dataset.cellId);
+      return;
+    }
+
     closeDrawer();
   });
 
-  // Escape key
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') closeDrawer();
   });

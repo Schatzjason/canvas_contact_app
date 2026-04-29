@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>By Module — wireframe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --surface: #ffffff;
+    --border: #e4e2dc;
+    --border-strong: #c8c4bb;
+    --text-primary: #1a1915;
+    --text-secondary: #6b6760;
+    --text-tertiary: #9b9893;
+    --icon-message: #3b6fd4;
+    --icon-group: #1a8a6a;
+    --icon-discussion: #7c4dba;
+    --icon-submit: #6b6760;
+    --icon-submit-bg: #f0eee8;
+    --mono: 'IBM Plex Mono', ui-monospace, monospace;
+    --sans: 'IBM Plex Sans', -apple-system, system-ui, sans-serif;
+  }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text-primary);
+    margin: 0;
+    padding: 40px;
+  }
+
+  .wrap { max-width: 980px; margin: 0 auto; }
+
+  .section-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+
+  .by-module {
+    display: grid;
+    grid-template-columns: 160px repeat(var(--col-count, 6), minmax(70px, 1fr));
+    column-gap: 0;
+    row-gap: 0;
+    align-items: stretch;
+  }
+
+  .col-header {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-align: center;
+    padding-bottom: 12px;
+  }
+
+  .module-cell {
+    text-align: right;
+    padding: 14px 14px 14px 0;
+  }
+  .module-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    line-height: 1.3;
+  }
+  .module-date {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-tertiary);
+    margin-top: 2px;
+  }
+
+  .data-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 4px;
+    min-height: 56px;
+  }
+
+  /* Single icon */
+  .icon-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 5px;
+    flex-shrink: 0;
+  }
+  .icon-wrap svg { width: 16px; height: 16px; }
+
+  /* Type styles */
+  .icon-msg            { background: #eef3fc; border: 2px solid var(--icon-message);    color: var(--icon-message); }
+  .icon-msg.student    { border-style: dashed; }
+  .icon-grp            { background: #e8f5f0; border: 2px solid var(--icon-group);      color: var(--icon-group); }
+  .icon-disc           { background: #f3eefb; border: 2px solid var(--icon-discussion); color: var(--icon-discussion); }
+  .icon-sub            { background: var(--icon-submit-bg); border: 2px solid var(--icon-submit); color: var(--icon-submit); }
+  .icon-sub.late       { opacity: 0.55; }
+  .icon-exam           { background: #fef2f0; border: 2px solid #c0392b; color: #c0392b; }
+
+  /* Stack — front top-left, subsequent offset down-right by 6px */
+  .icon-stack {
+    position: relative;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .icon-stack.size-2 { width: 38px; height: 38px; }
+  .icon-stack.size-3 { width: 44px; height: 44px; }
+  .icon-stack .layer { position: absolute; }
+  .icon-stack .layer.front { top: 0; left: 0; z-index: 3; }
+  .icon-stack .layer.mid   { top: 6px; left: 6px; z-index: 2; }
+  .icon-stack .layer.back  { top: 12px; left: 12px; z-index: 1; }
+  .icon-stack.size-2 .layer.back { top: 6px; left: 6px; z-index: 1; }
+
+  .stack-row { display: flex; align-items: center; gap: 7px; }
+  .stack-overflow {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .recent-placeholder {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-tertiary);
+    padding: 12px 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="section-title">By Module</div>
+
+  <div class="by-module" style="--col-count: 6;">
+
+    <div></div>
+    <div class="col-header">Messages</div>
+    <div class="col-header">Readings</div>
+    <div class="col-header">Programs</div>
+    <div class="col-header">Quizzes</div>
+    <div class="col-header">Discussions</div>
+    <div class="col-header">Exams</div>
+
+    <!-- Module 6 -->
+    <div class="module-cell">
+      <div class="module-name">Module 6: File I/O</div>
+      <div class="module-date">Apr 21</div>
+    </div>
+    <div class="data-cell">
+      <div class="stack-row">
+        <span class="icon-stack size-3">
+          <span class="layer back"><span class="icon-wrap icon-msg"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4h12v8H2z"/><path d="M2 4l6 4 6-4"/></svg></span></span>
+          <span class="layer mid"><span class="icon-wrap icon-msg student"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4h12v8H2z"/><path d="M2 4l6 4 6-4"/></svg></span></span>
+          <span class="layer front"><span class="icon-wrap icon-msg"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4h12v8H2z"/><path d="M2 4l6 4 6-4"/></svg></span></span>
+        </span>
+        <span class="stack-overflow">+2</span>
+      </div>
+    </div>
+    <div class="data-cell"><span class="icon-wrap icon-sub"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 2h7l3 3v9H3z"/><path d="M10 2v3h3"/></svg></span></div>
+    <div class="data-cell"><span class="icon-wrap icon-sub"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 2h7l3 3v9H3z"/><path d="M10 2v3h3"/></svg></span></div>
+    <div class="data-cell"><span class="icon-wrap icon-sub late"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 2h7l3 3v9H3z"/><path d="M10 2v3h3"/></svg></span></div>
+    <div class="data-cell"><span class="icon-wrap icon-disc"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="5"/><path d="M5 8h6"/></svg></span></div>
+    <div class="data-cell"></div>
+
+    <!-- Module 5 -->
+    <div class="module-cell">
+      <div class="module-name">Module 5: Functions</div>
+      <div class="module-date">Apr 7</div>
+    </div>
+    <div class="data-cell">
+      <span class="icon-stack size-2">
+        <span class="layer back"><span class="icon-wrap icon-grp"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4h12v8H2z"/><path d="M2 4l6 4 6-4"/></svg></span></span>
+        <span class="layer front"><span class="icon-wrap icon-msg"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4h12v8H2z"/><path d="M2 4l6 4 6-4"/></svg></span></span>
+      </span>
+    </div>
+    <div class="data-cell"><span class="icon-wrap icon-sub"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 2h7l3 3v9H3z"/><path d="M10 2v3h3"/></svg></span></div>
+    <div class="data-cell"><span class="icon-wrap icon-sub"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 2h7l3 3v9H3z"/><path d="M10 2v3h3"/></svg></span></div>
+    <div class="data-cell"></div>
+    <div class="data-cell"><span class="icon-wrap icon-disc"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="5"/><path d="M5 8h6"/></svg></span></div>
+    <div class="data-cell"></div>
+
+    <!-- Module 4 -->
+    <div class="module-cell">
+      <div class="module-name">Module 4: Loops</div>
+      <div class="module-date">Mar 24</div>
+    </div>
+    <div class="data-cell"></div>
+    <div class="data-cell"><span class="icon-wrap icon-sub"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 2h7l3 3v9H3z"/><path d="M10 2v3h3"/></svg></span></div>
+    <div class="data-cell">
+      <span class="icon-stack size-2">
+        <span class="layer back"><span class="icon-wrap icon-sub late"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 2h7l3 3v9H3z"/><path d="M10 2v3h3"/></svg></span></span>
+        <span class="layer front"><span class="icon-wrap icon-sub"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 2h7l3 3v9H3z"/><path d="M10 2v3h3"/></svg></span></span>
+      </span>
+    </div>
+    <div class="data-cell"><span class="icon-wrap icon-sub"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 2h7l3 3v9H3z"/><path d="M10 2v3h3"/></svg></span></div>
+    <div class="data-cell"></div>
+    <div class="data-cell"></div>
+
+    <!-- Module 3 -->
+    <div class="module-cell">
+      <div class="module-name">Module 3: Conditionals</div>
+      <div class="module-date">Mar 10</div>
+    </div>
+    <div class="data-cell"><span class="icon-wrap icon-msg student"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4h12v8H2z"/><path d="M2 4l6 4 6-4"/></svg></span></div>
+    <div class="data-cell"></div>
+    <div class="data-cell"><span class="icon-wrap icon-sub"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 2h7l3 3v9H3z"/><path d="M10 2v3h3"/></svg></span></div>
+    <div class="data-cell"></div>
+    <div class="data-cell"><span class="icon-wrap icon-disc"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="5"/><path d="M5 8h6"/></svg></span></div>
+    <div class="data-cell"><span class="icon-wrap icon-exam"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5l3 3 7-7"/><path d="M3 11l3 3 7-7"/></svg></span></div>
+
+    <!-- Module 2 -->
+    <div class="module-cell">
+      <div class="module-name">Module 2: Variables</div>
+      <div class="module-date">Feb 24</div>
+    </div>
+    <div class="data-cell"><span class="icon-wrap icon-msg"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4h12v8H2z"/><path d="M2 4l6 4 6-4"/></svg></span></div>
+    <div class="data-cell"><span class="icon-wrap icon-sub"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 2h7l3 3v9H3z"/><path d="M10 2v3h3"/></svg></span></div>
+    <div class="data-cell"><span class="icon-wrap icon-sub"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 2h7l3 3v9H3z"/><path d="M10 2v3h3"/></svg></span></div>
+    <div class="data-cell"><span class="icon-wrap icon-sub"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 2h7l3 3v9H3z"/><path d="M10 2v3h3"/></svg></span></div>
+    <div class="data-cell"></div>
+    <div class="data-cell"></div>
+
+    <!-- Module 1 -->
+    <div class="module-cell">
+      <div class="module-name">Module 1: Hello, World</div>
+      <div class="module-date">Feb 10</div>
+    </div>
+    <div class="data-cell"></div>
+    <div class="data-cell"></div>
+    <div class="data-cell"><span class="icon-wrap icon-sub"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 2h7l3 3v9H3z"/><path d="M10 2v3h3"/></svg></span></div>
+    <div class="data-cell"></div>
+    <div class="data-cell"><span class="icon-wrap icon-disc"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="5"/><path d="M5 8h6"/></svg></span></div>
+    <div class="data-cell"></div>
+
+    <!-- Module 0 -->
+    <div class="module-cell">
+      <div class="module-name">Module 0: Course Setup</div>
+      <div class="module-date">Jan 27</div>
+    </div>
+    <div class="data-cell"></div>
+    <div class="data-cell"></div>
+    <div class="data-cell"></div>
+    <div class="data-cell"></div>
+    <div class="data-cell"></div>
+    <div class="data-cell"></div>
+  </div>
+
+  <div class="section-title" style="margin-top: 32px;">Recent Activity</div>
+  <div class="recent-placeholder">[ existing 21-day timeline component remains here, renamed from "Last 21 Days" ]</div>
+
+</div>
+</body>
+</html>

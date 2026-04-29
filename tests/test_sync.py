@@ -32,7 +32,8 @@ INSTRUCTOR_ID = 500
 
 def _make_client(enrollments=None, conversations=None, inbox=None,
                  topics=None, entries_by_topic=None, instructor_id=INSTRUCTOR_ID,
-                 assignments=None, submissions_by_assignment=None):
+                 assignments=None, submissions_by_assignment=None,
+                 course_start_days_ago=21):
     """Return a mock CanvasClient that yields controlled fixture data.
 
     conversations: sent (instructor) conversations (scope='sent')
@@ -40,10 +41,16 @@ def _make_client(enrollments=None, conversations=None, inbox=None,
     instructor_id: Canvas user ID returned by get_current_user
     assignments:   list of assignment dicts (each needs at least 'id')
     submissions_by_assignment: {assignment_id: [submission_dicts]}
+    course_start_days_ago: how far back the course's start_at sits; controls
+        the sync cutoff. Default 21 preserves prior test semantics.
     """
     mock = MagicMock()
     mock.get_enrollments.return_value = enrollments or []
     mock.get_current_user.return_value = {'id': instructor_id}
+    mock.get_course.return_value = {
+        'id': COURSE_ID,
+        'start_at': _days_ago(course_start_days_ago),
+    }
 
     sent_convs  = conversations or []
     inbox_convs = inbox or []
@@ -491,10 +498,11 @@ def test_sync_uses_marker_as_since():
 
 
 def test_sync_falls_back_to_cutoff_when_no_marker():
-    """Without a sync marker, stream_conversations receives the 21-day cutoff."""
+    """Without a sync marker, stream_conversations receives the course-start cutoff."""
     mock = MagicMock()
     mock.get_enrollments.return_value = [{'user_id': STUDENT_A}]
     mock.get_current_user.return_value = {'id': INSTRUCTOR_ID}
+    mock.get_course.return_value = {'id': COURSE_ID, 'start_at': _days_ago(21)}
     mock.stream_conversations.side_effect = lambda since=None, scope='sent': iter([])
     mock.get_discussion_topics.return_value = []
     mock.get_assignments.return_value = []
@@ -504,8 +512,6 @@ def test_sync_falls_back_to_cutoff_when_no_marker():
 
     sent_call = _find_sent_call(mock)
     since_used = sent_call.kwargs['since']
-    # Cutoff is midnight(today) - 21 days, so age is between 21 and 22 days
-    # depending on the time of day the test runs.
     age_days = (datetime.now(timezone.utc) - since_used).total_seconds() / 86400
     assert 21.0 <= age_days < 22.0
 
