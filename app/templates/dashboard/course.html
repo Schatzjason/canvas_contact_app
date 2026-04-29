@@ -133,7 +133,28 @@
     gap: 0;
     border-bottom: 1px solid var(--border);
     margin-bottom: 24px;
+    align-items: stretch;
   }
+  .tab-bar-spacer { flex: 1; }
+  .refresh-structure-btn {
+    align-self: center;
+    margin-bottom: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    padding: 5px 11px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+  }
+  .refresh-structure-btn:hover:not(:disabled) { background: var(--border); color: var(--text-primary); }
+  .refresh-structure-btn:disabled { opacity: 0.5; cursor: wait; }
+  .refresh-structure-btn svg { width: 12px; height: 12px; }
   .tab-link {
     font-family: var(--mono);
     font-size: 12px;
@@ -458,6 +479,15 @@
     <a class="tab-link{% if active_tab == 'timeline' %} active{% endif %}" href="{{ url_for('dashboard.course', course_id=course.id, tab='timeline') }}">Student Work
     <a class="tab-link{% if active_tab == 'submissions' %} active{% endif %}" href="{{ url_for('dashboard.course', course_id=course.id, tab='submissions') }}">Instructor Contact</a>
     <a class="tab-link{% if active_tab == 'analytics' %} active{% endif %}" href="{{ url_for('dashboard.course', course_id=course.id, tab='analytics') }}">Analytics</a>
+    <div class="tab-bar-spacer"></div>
+    <button type="button" class="refresh-structure-btn" id="refresh-structure-btn"
+            data-url="{{ url_for('dashboard.refresh_course_structure', course_id=course.id) }}"
+            title="Re-fetch modules and assignments from Canvas, then recompute module dates">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5"/><path d="M13.5 2.5v3h-3"/>
+      </svg>
+      Refresh Course Structure
+    </button>
   </div>
 </div>
 
@@ -876,6 +906,33 @@
         window.location.href = url;
       });
     }
+  });
+})();
+
+// Refresh Course Structure
+(function () {
+  var btn = document.getElementById('refresh-structure-btn');
+  if (!btn) return;
+  var originalText = btn.querySelector('svg').outerHTML + ' Refresh Course Structure';
+  btn.addEventListener('click', function () {
+    btn.disabled = true;
+    btn.innerHTML = btn.querySelector('svg').outerHTML + ' Refreshing…';
+    fetch(btn.dataset.url, { method: 'POST' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data && data.ok) {
+          window.location.reload();
+        } else {
+          btn.innerHTML = originalText;
+          btn.disabled = false;
+          alert('Refresh failed.');
+        }
+      })
+      .catch(function () {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        alert('Refresh failed.');
+      });
   });
 })();
 </script>

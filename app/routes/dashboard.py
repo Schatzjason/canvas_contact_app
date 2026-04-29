@@ -269,19 +269,13 @@ def flush_cache():
 
 @bp.route('/course/<int:course_id>/refresh-structure', methods=['POST'])
 def refresh_course_structure(course_id):
-    """Invalidate and re-fetch modules and assignment groups for a course."""
+    """Invalidate and re-fetch modules + assignment groups, then recompute module dates."""
     client = CanvasClient()
     client.invalidate_course_structure(course_id)
     client.get_assignment_groups(course_id)
     client.get_modules(course_id)
-    return {'ok': True}
-
-
-@bp.route('/course/<int:course_id>/recompute-module-dates', methods=['POST'])
-def recompute_module_dates(course_id):
-    """Recompute start/end dates for each module in this course."""
-    count = recompute_course_modules(course_id, tz=_get_tz())
-    return {'ok': True, 'count': count}
+    module_count = recompute_course_modules(course_id, tz=_get_tz())
+    return {'ok': True, 'modules': module_count}
 
 
 @bp.route('/course/<int:course_id>/display-name', methods=['POST'])
