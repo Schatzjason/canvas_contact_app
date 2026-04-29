@@ -1,0 +1,113 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e4]: CanvasContactTracker
+      - generic [ref=e5]: Instructor Tools
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - img [ref=e8]
+        - textbox "Search students" [ref=e11]
+      - generic [ref=e12]: Spring 2025
+  - main [ref=e13]:
+    - generic [ref=e14]:
+      - generic [ref=e15]:
+        - heading "Courses" [level=1] [ref=e16]
+        - paragraph [ref=e17]: 4 active courses
+      - generic [ref=e18]:
+        - 'link "CS131B - In Person (001) CS 131B-Prog Fundamentals: Python-001 30 Active 5d ago Last seen Refresh data" [ref=e19] [cursor=pointer]':
+          - /url: /course/70241
+          - generic [ref=e20]:
+            - generic [ref=e21]: CS131B - In Person (001)
+            - generic [ref=e22]: "CS 131B-Prog Fundamentals: Python-001"
+          - generic [ref=e23]:
+            - generic [ref=e24]:
+              - generic [ref=e25]: "30"
+              - generic [ref=e26]: Active
+            - generic [ref=e27]:
+              - generic [ref=e28]: 5d ago
+              - generic [ref=e29]: Last seen
+          - generic [ref=e30]:
+            - button "Refresh data" [ref=e31]:
+              - img [ref=e32]
+              - text: Refresh data
+            - img [ref=e35]
+        - 'link "111B - 8 Week (934) CS 111B-Programming Fundamentals: Java-934 47 Active 5d ago Last seen Refresh data" [ref=e37] [cursor=pointer]':
+          - /url: /course/70142
+          - generic [ref=e38]:
+            - generic [ref=e39]: 111B - 8 Week (934)
+            - generic [ref=e40]: "CS 111B-Programming Fundamentals: Java-934"
+          - generic [ref=e41]:
+            - generic [ref=e42]:
+              - generic [ref=e43]: "47"
+              - generic [ref=e44]: Active
+            - generic [ref=e45]:
+              - generic [ref=e46]: 5d ago
+              - generic [ref=e47]: Last seen
+          - generic [ref=e48]:
+            - button "Refresh data" [ref=e49]:
+              - img [ref=e50]
+              - text: Refresh data
+            - img [ref=e53]
+        - 'link "111B - 8 Week (933) CS 111B-Programming Fundamentals: Java-933 39 Active 5d ago Last seen Refresh data" [ref=e55] [cursor=pointer]':
+          - /url: /course/70145
+          - generic [ref=e56]:
+            - generic [ref=e57]: 111B - 8 Week (933)
+            - generic [ref=e58]: "CS 111B-Programming Fundamentals: Java-933"
+          - generic [ref=e59]:
+            - generic [ref=e60]:
+              - generic [ref=e61]: "39"
+              - generic [ref=e62]: Active
+            - generic [ref=e63]:
+              - generic [ref=e64]: 5d ago
+              - generic [ref=e65]: Last seen
+          - generic [ref=e66]:
+            - button "Refresh data" [ref=e67]:
+              - img [ref=e68]
+              - text: Refresh data
+            - img [ref=e71]
+        - 'link "111B - 16 Week (932) CS 111B-Programming Fundamentals: Java-932 30 Active 1h ago Last seen Refresh data" [ref=e73] [cursor=pointer]':
+          - /url: /course/70862
+          - generic [ref=e74]:
+            - generic [ref=e75]: 111B - 16 Week (932)
+            - generic [ref=e76]: "CS 111B-Programming Fundamentals: Java-932"
+          - generic [ref=e77]:
+            - generic [ref=e78]:
+              - generic [ref=e79]: "30"
+              - generic [ref=e80]: Active
+            - generic [ref=e81]:
+              - generic [ref=e82]: 1h ago
+              - generic [ref=e83]: Last seen
+          - generic [ref=e84]:
+            - button "Refresh data" [ref=e85]:
+              - img [ref=e86]
+              - text: Refresh data
+            - img [ref=e89]
+      - generic [ref=e91]:
+        - generic [ref=e92]:
+          - heading "Check Back" [level=1] [ref=e93]
+          - paragraph [ref=e94]: 2 upcoming
+        - table [ref=e96]:
+          - rowgroup [ref=e97]:
+            - row "Date Student Course Note" [ref=e98]:
+              - columnheader "Date" [ref=e99]
+              - columnheader "Student" [ref=e100]
+              - columnheader "Course" [ref=e101]
+              - columnheader "Note" [ref=e102]
+              - columnheader [ref=e103]
+          - rowgroup [ref=e104]:
+            - row "Monday 4/27 Benotmane, Mounib 111B - 8 Week (933)" [ref=e105] [cursor=pointer]:
+              - cell "Monday 4/27" [ref=e106]
+              - cell "Benotmane, Mounib" [ref=e107]
+              - cell "111B - 8 Week (933)" [ref=e108]
+              - cell [ref=e109]
+              - cell [ref=e110]:
+                - button "Remove check-back" [ref=e111]:
+                  - img [ref=e112]
+            - row "Friday 5/1 Deras, Jose 111B - 8 Week (934) Given last chance. Must have projects by Fri" [ref=e115] [cursor=pointer]:
+              - cell "Friday 5/1" [ref=e116]
+              - cell "Deras, Jose" [ref=e117]
+              - cell "111B - 8 Week (934)" [ref=e118]
+              - cell "Given last chance. Must have projects by Fri" [ref=e119]
+              - cell [ref=e120]:
+                - button "Remove check-back" [ref=e121]:
+                  - img [ref=e122]
