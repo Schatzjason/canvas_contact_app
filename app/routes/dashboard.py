@@ -20,6 +20,7 @@ from app.models.pinned_discussion import PinnedDiscussion
 from app.models.student_note import StudentNote
 from app.models.student_record import StudentRecord
 from app.services.canvas_client import CanvasClient, TTL_CONVERSATIONS
+from app.services.course_modules import recompute_course_modules
 from app.services.sync import run_sync, sync_course
 
 bp = Blueprint('dashboard', __name__)
@@ -274,6 +275,13 @@ def refresh_course_structure(course_id):
     client.get_assignment_groups(course_id)
     client.get_modules(course_id)
     return {'ok': True}
+
+
+@bp.route('/course/<int:course_id>/recompute-module-dates', methods=['POST'])
+def recompute_module_dates(course_id):
+    """Recompute start/end dates for each module in this course."""
+    count = recompute_course_modules(course_id, tz=_get_tz())
+    return {'ok': True, 'count': count}
 
 
 @bp.route('/course/<int:course_id>/display-name', methods=['POST'])
