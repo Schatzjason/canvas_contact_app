@@ -785,7 +785,7 @@ def test_flush_cache_deletes_entries_and_redirects(client):
     ))
     db.session.commit()
 
-    response = client.post(f'/course/{COURSE_ID}/flush-cache')
+    response = client.post('/flush-cache')
 
     assert response.status_code == 302
     assert CanvasCache.query.count() == 0

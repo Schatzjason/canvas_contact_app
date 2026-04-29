@@ -257,8 +257,8 @@ def course_stats(course_id):
     return {'badge_text': badge_text, 'badge_class': badge_class, 'active_count': active_count}
 
 
-@bp.route('/course/<int:course_id>/flush-cache', methods=['POST'])
-def flush_cache(course_id):
+@bp.route('/flush-cache', methods=['POST'])
+def flush_cache():
     """Dev tool: delete all cached Canvas API responses and redirect to index."""
     deleted = db.session.query(CanvasCache).delete()
     db.session.commit()
