@@ -13,6 +13,7 @@ from app.models.canvas_cache import CanvasCache
 TTL_CONVERSATIONS = 2 * 60 * 60
 TTL_DISCUSSION_ENTRIES = 2 * 60 * 60
 TTL_ENROLLMENTS = 24 * 60 * 60
+TTL_PERMANENT = 0  # never expires; manually refreshed
 TTL_ASSIGNMENTS = 2 * 60 * 60
 TTL_SUBMISSIONS = 2 * 60 * 60
 
@@ -261,6 +262,30 @@ class CanvasClient:
         )
         resp.raise_for_status()
         return resp.json()
+
+    def get_assignment_groups(self, course_id):
+        """Assignment groups for a course (permanent cache; manually refreshed)."""
+        return self._get_all_pages(
+            f'/api/v1/courses/{course_id}/assignment_groups',
+            ttl=TTL_PERMANENT,
+        )
+
+    def get_modules(self, course_id):
+        """Modules with items for a course (permanent cache; manually refreshed)."""
+        return self._get_all_pages(
+            f'/api/v1/courses/{course_id}/modules',
+            params={'include[]': 'items'},
+            ttl=TTL_PERMANENT,
+        )
+
+    def invalidate_course_structure(self, course_id):
+        """Delete cached modules and assignment groups for a course, forcing a re-fetch."""
+        keys = [
+            self._make_cache_key(f'/api/v1/courses/{course_id}/assignment_groups', None),
+            self._make_cache_key(f'/api/v1/courses/{course_id}/modules', {'include[]': 'items'}),
+        ]
+        CanvasCache.query.filter(CanvasCache.cache_key.in_(keys)).delete()
+        db.session.commit()
 
     def get_assignments(self, course_id):
         """All assignments for a course (cached 60 min)."""

@@ -266,6 +266,16 @@ def flush_cache(course_id):
     return redirect(url_for('dashboard.index'))
 
 
+@bp.route('/course/<int:course_id>/refresh-structure', methods=['POST'])
+def refresh_course_structure(course_id):
+    """Invalidate and re-fetch modules and assignment groups for a course."""
+    client = CanvasClient()
+    client.invalidate_course_structure(course_id)
+    client.get_assignment_groups(course_id)
+    client.get_modules(course_id)
+    return {'ok': True}
+
+
 @bp.route('/course/<int:course_id>/display-name', methods=['POST'])
 def save_display_name(course_id):
     name = request.get_json(force=True).get('name', '').strip()

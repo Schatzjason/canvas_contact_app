@@ -14,5 +14,7 @@ class CanvasCache(db.Model):
     ttl_seconds = db.Column(db.Integer, nullable=False)
 
     def is_fresh(self):
+        if self.ttl_seconds == 0:
+            return True
         age = (datetime.now(timezone.utc) - self.fetched_at).total_seconds()
         return age < self.ttl_seconds
