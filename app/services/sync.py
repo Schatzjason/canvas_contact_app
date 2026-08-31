@@ -307,7 +307,13 @@ def sync_course(course_id):
         course_obj = client.get_course(course_id)
         start_str = course_obj.get('start_at')
     except Exception:
+        course_obj = None
         start_str = None
+    # When a course concludes, Canvas drops every enrollment (including
+    # students') out of the 'active' state we filter on below. Without this
+    # guard that would look like every student withdrew on the same day —
+    # flipping them all to 'dropped' and wiping their check-back dates.
+    concluded = bool(course_obj) and course_obj.get('workflow_state') in ('completed', 'deleted')
     if start_str:
         try:
             cutoff = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
@@ -363,24 +369,26 @@ def sync_course(course_id):
         )
         db.session.execute(stmt)
 
-    # Mark students no longer in the enrollment as dropped
-    now_utc = datetime.now(timezone.utc)
-    newly_dropped = StudentRecord.query.filter(
-        StudentRecord.course_id == course_id,
-        StudentRecord.status == 'active',
-        ~StudentRecord.student_canvas_id.in_(student_ids) if student_ids else True,
-    ).all()
-    for rec in newly_dropped:
-        rec.status = 'dropped'
-        rec.dropped_at = now_utc
+    # Mark students no longer in the enrollment as dropped — skipped for
+    # concluded courses, see `concluded` above.
+    if not concluded:
+        now_utc = datetime.now(timezone.utc)
+        newly_dropped = StudentRecord.query.filter(
+            StudentRecord.course_id == course_id,
+            StudentRecord.status == 'active',
+            ~StudentRecord.student_canvas_id.in_(student_ids) if student_ids else True,
+        ).all()
+        for rec in newly_dropped:
+            rec.status = 'dropped'
+            rec.dropped_at = now_utc
 
-    # Remove check-back dates for dropped students
-    if newly_dropped:
-        dropped_ids = [rec.student_canvas_id for rec in newly_dropped]
-        CheckBackDate.query.filter(
-            CheckBackDate.course_id == course_id,
-            CheckBackDate.student_canvas_id.in_(dropped_ids),
-        ).delete(synchronize_session=False)
+        # Remove check-back dates for dropped students
+        if newly_dropped:
+            dropped_ids = [rec.student_canvas_id for rec in newly_dropped]
+            CheckBackDate.query.filter(
+                CheckBackDate.course_id == course_id,
+                CheckBackDate.student_canvas_id.in_(dropped_ids),
+            ).delete(synchronize_session=False)
 
     db.session.commit()
 

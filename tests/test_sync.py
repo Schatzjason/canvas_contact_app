@@ -1195,6 +1195,44 @@ def test_sync_updates_name_on_change():
     assert rec.sortable_name == 'Jones, Alice'
 
 
+def test_sync_skips_drop_detection_for_concluded_course():
+    # First sync: both students enrolled, course still active
+    client = _make_client(enrollments=[
+        _enrollment(STUDENT_A), _enrollment(STUDENT_B),
+    ])
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    # Seed a check-back date for B
+    from datetime import date
+    db.session.add(CheckBackDate(
+        course_id=COURSE_ID, student_canvas_id=STUDENT_B,
+        date=date(2026, 4, 10),
+    ))
+    db.session.commit()
+
+    # Second sync: course has concluded, so Canvas reports no active
+    # enrollments at all — this must not be treated as a mass drop.
+    client2 = _make_client(enrollments=[])
+    client2.get_course.return_value = {
+        'id': COURSE_ID,
+        'start_at': _days_ago(21),
+        'workflow_state': 'completed',
+    }
+    with patch('app.services.sync.CanvasClient', return_value=client2):
+        _run()
+
+    rec_a = StudentRecord.query.filter_by(
+        course_id=COURSE_ID, student_canvas_id=STUDENT_A
+    ).first()
+    rec_b = StudentRecord.query.filter_by(
+        course_id=COURSE_ID, student_canvas_id=STUDENT_B
+    ).first()
+    assert rec_a.status == 'active'
+    assert rec_b.status == 'active'
+    assert CheckBackDate.query.filter_by(student_canvas_id=STUDENT_B).count() == 1
+
+
 def test_sync_first_run_no_false_drops():
     """On first sync with no existing records, no one should be marked dropped."""
     client = _make_client(enrollments=[
