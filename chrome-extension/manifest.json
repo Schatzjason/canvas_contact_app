@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Contact Tracker Link",
+  "version": "0.1.0",
+  "description": "Right-click a student's name in Canvas to open their page in the local Canvas Contact Tracker app.",
+  "permissions": ["contextMenus", "tabs"],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
