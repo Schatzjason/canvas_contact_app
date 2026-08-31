@@ -1,9 +1,10 @@
 const MENU_ID = 'open-in-contact-tracker';
 
-// Matches Canvas's canonical per-course user profile link:
-// https://ccsf.instructure.com/courses/<course_id>/users/<student_id>
-// Confirmed against a real Discussions author link on 2026-08-31.
-const CANVAS_USER_LINK = /^https:\/\/ccsf\.instructure\.com\/courses\/(\d+)\/users\/(\d+)/;
+// Matches the two Canvas student-link shapes confirmed so far:
+//   .../courses/<course_id>/users/<student_id>   (Discussions, People page)
+//   .../courses/<course_id>/grades/<student_id>  (Gradebook)
+// Confirmed against real links on 2026-08-31.
+const CANVAS_USER_LINK = /^https:\/\/ccsf\.instructure\.com\/courses\/(\d+)\/(?:users|grades)\/(\d+)/;
 
 // TODO(step 6): move to an options page + chrome.storage instead of hardcoding.
 const TRACKER_BASE_URL = 'http://127.0.0.1:5000';
@@ -14,7 +15,10 @@ chrome.runtime.onInstalled.addListener(() => {
     title: 'Open in Contact Tracker',
     contexts: ['link'],
     documentUrlPatterns: ['https://ccsf.instructure.com/*'],
-    targetUrlPatterns: ['https://ccsf.instructure.com/courses/*/users/*'],
+    targetUrlPatterns: [
+      'https://ccsf.instructure.com/courses/*/users/*',
+      'https://ccsf.instructure.com/courses/*/grades/*',
+    ],
   });
 });
 
