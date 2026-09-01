@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Contact Tracker Link — Settings</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      max-width: 420px;
+      margin: 2rem;
+      color: #1a1a1a;
+    }
+    h1 {
+      font-size: 1.1rem;
+      margin-bottom: 1rem;
+    }
+    label {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      line-height: 1.4;
+    }
+    input[type="checkbox"] {
+      margin-top: 0.2rem;
+    }
+    p.hint {
+      color: #666;
+      font-size: 0.85rem;
+      margin-top: 0.5rem;
+      margin-left: 1.5rem;
+    }
+    #status {
+      margin-top: 1rem;
+      font-size: 0.85rem;
+      color: #2a7;
+      height: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Contact Tracker Link</h1>
+  <label>
+    <input type="checkbox" id="reuseTab" />
+    Reuse an existing tracker tab instead of opening a new one each time
+  </label>
+  <p class="hint">
+    When on, clicking "Open in Contact Tracker" reuses/focuses a tab already
+    showing the tracker app, if one is open. When off, every click opens a
+    brand-new tab.
+  </p>
+  <div id="status"></div>
+  <script src="options.js"></script>
+</body>
+</html>

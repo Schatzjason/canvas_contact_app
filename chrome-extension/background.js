@@ -13,8 +13,8 @@ const CANVAS_USER_LINK = /^https:\/\/ccsf\.instructure\.com\/courses\/(\d+)\/(?:
 // e.g. .../courses/73658/gradebook/speed_grader?assignment_id=...&student_id=325786
 const SPEEDGRADER_URL = /^https:\/\/ccsf\.instructure\.com\/courses\/(\d+)\/gradebook\/speed_grader/;
 
-// TODO(step 6): move to an options page + chrome.storage instead of hardcoding.
 const TRACKER_BASE_URL = 'http://127.0.0.1:5000';
+const STORAGE_DEFAULTS = { reuseTab: true };
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -36,8 +36,20 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-function openStudent(courseId, studentId) {
+async function openStudent(courseId, studentId) {
   const targetUrl = `${TRACKER_BASE_URL}/course/${courseId}/student/${studentId}`;
+  const { reuseTab } = await chrome.storage.local.get(STORAGE_DEFAULTS);
+
+  if (reuseTab) {
+    const existing = await chrome.tabs.query({ url: `${TRACKER_BASE_URL}/*` });
+    if (existing.length > 0) {
+      const [tab] = existing;
+      await chrome.tabs.update(tab.id, { url: targetUrl, active: true });
+      await chrome.windows.update(tab.windowId, { focused: true });
+      return;
+    }
+  }
+
   chrome.tabs.create({ url: targetUrl });
 }
 
