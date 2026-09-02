@@ -1013,8 +1013,12 @@ document.querySelectorAll('.cb-delete-btn').forEach(function (btn) {
   input.addEventListener('input', function () {
     var q = input.value.trim().toLowerCase();
     if (!q) { results.innerHTML = ''; return; }
+    // Names are stored "Last, First" — split the query into tokens so
+    // "Sam Manandhar" matches "Manandhar, Sam" regardless of word order.
+    var tokens = q.split(/\s+/).filter(Boolean);
     var matches = STUDENTS.filter(function (s) {
-      return s.name.toLowerCase().indexOf(q) !== -1;
+      var name = s.name.toLowerCase();
+      return tokens.every(function (t) { return name.indexOf(t) !== -1; });
     });
     render(matches);
   });
