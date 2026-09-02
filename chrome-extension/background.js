@@ -1,5 +1,6 @@
 const LINK_MENU_ID = 'open-in-contact-tracker';
 const SPEEDGRADER_MENU_ID = 'open-in-contact-tracker-speedgrader';
+const INBOX_MENU_ID = 'open-in-contact-tracker-inbox';
 
 // Matches the two Canvas student-link shapes confirmed so far:
 //   .../courses/<course_id>/users/<student_id>   (Discussions, People page)
@@ -34,10 +35,16 @@ chrome.runtime.onInstalled.addListener(() => {
     contexts: ['page'],
     documentUrlPatterns: ['https://ccsf.instructure.com/courses/*/gradebook/speed_grader*'],
   });
+
+  chrome.contextMenus.create({
+    id: INBOX_MENU_ID,
+    title: 'Open in Contact Tracker',
+    contexts: ['page'],
+    documentUrlPatterns: ['https://ccsf.instructure.com/conversations*'],
+  });
 });
 
-async function openStudent(courseId, studentId) {
-  const targetUrl = `${TRACKER_BASE_URL}/course/${courseId}/student/${studentId}`;
+async function openTrackerUrl(targetUrl) {
   const { reuseTab } = await chrome.storage.local.get(STORAGE_DEFAULTS);
 
   if (reuseTab) {
@@ -51,6 +58,19 @@ async function openStudent(courseId, studentId) {
   }
 
   chrome.tabs.create({ url: targetUrl });
+}
+
+function openStudent(courseId, studentId) {
+  return openTrackerUrl(`${TRACKER_BASE_URL}/course/${courseId}/student/${studentId}`);
+}
+
+async function openInboxSearch() {
+  const { inboxStudentName } = await chrome.storage.local.get('inboxStudentName');
+  if (!inboxStudentName) {
+    console.warn('Contact Tracker: no student name captured for this click (right-click a conversation row in the list)');
+    return;
+  }
+  await openTrackerUrl(`${TRACKER_BASE_URL}/?q=${encodeURIComponent(inboxStudentName)}`);
 }
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
@@ -74,5 +94,10 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
       return;
     }
     openStudent(courseMatch[1], studentId);
+    return;
+  }
+
+  if (info.menuItemId === INBOX_MENU_ID) {
+    openInboxSearch();
   }
 });

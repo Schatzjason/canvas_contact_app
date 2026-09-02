@@ -7,5 +7,11 @@
   "background": {
     "service_worker": "background.js"
   },
+  "content_scripts": [
+    {
+      "matches": ["https://ccsf.instructure.com/conversations*"],
+      "js": ["content-inbox.js"]
+    }
+  ],
   "options_page": "options.html"
 }

@@ -1018,6 +1018,15 @@ document.querySelectorAll('.cb-delete-btn').forEach(function (btn) {
     });
     render(matches);
   });
+
+  // ── Pre-fill from ?q=<name> (e.g. from the Contact Tracker Link extension)
+  var qParam = new URLSearchParams(window.location.search).get('q');
+  if (qParam) {
+    history.replaceState(null, '', window.location.pathname);
+    input.value = qParam;
+    expand();
+    input.dispatchEvent(new Event('input'));
+  }
 })();
 </script>
 {% endblock %}
