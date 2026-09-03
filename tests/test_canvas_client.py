@@ -328,3 +328,28 @@ def test_get_all_pages_caches_combined_result():
     entry = CanvasCache.query.first()
     assert entry is not None
     assert entry.response_json == [{'id': 1}, {'id': 2}]
+
+
+# ---------------------------------------------------------------------------
+# get_conversation
+# ---------------------------------------------------------------------------
+
+def test_get_conversation_hits_detail_endpoint():
+    detail = {'id': 3890130, 'messages': [{'id': 7397533, 'created_at': '2026-09-03T19:36:09Z'}]}
+    with patch('requests.get', return_value=_mock_response(detail)) as mock_get:
+        client = CanvasClient()
+        result = client.get_conversation(3890130)
+
+    assert result == detail
+    called_url = mock_get.call_args[0][0]
+    assert called_url.endswith('/api/v1/conversations/3890130')
+
+
+def test_get_conversation_is_cached():
+    detail = {'id': 3890130, 'messages': []}
+    with patch('requests.get', return_value=_mock_response(detail)) as mock_get:
+        client = CanvasClient()
+        client.get_conversation(3890130)
+        client.get_conversation(3890130)
+
+    mock_get.assert_called_once()

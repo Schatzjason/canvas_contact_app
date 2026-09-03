@@ -33,16 +33,29 @@ INSTRUCTOR_ID = 500
 def _make_client(enrollments=None, conversations=None, inbox=None,
                  topics=None, entries_by_topic=None, instructor_id=INSTRUCTOR_ID,
                  assignments=None, submissions_by_assignment=None,
-                 course_start_days_ago=21):
+                 course_start_days_ago=21, conversation_details=None):
     """Return a mock CanvasClient that yields controlled fixture data.
 
-    conversations: sent (instructor) conversations (scope='sent')
-    inbox:         received conversations (scope='inbox') for student messages
+    conversations: sent (instructor) conversations (scope='sent') — list-view
+        summaries needing 'id', 'last_authored_message_at' (the real Canvas
+        field name), and 'participants'.
+    inbox:         received conversations (scope='inbox') — same shape, keyed
+        on 'last_message_at' instead.
     instructor_id: Canvas user ID returned by get_current_user
     assignments:   list of assignment dicts (each needs at least 'id')
     submissions_by_assignment: {assignment_id: [submission_dicts]}
     course_start_days_ago: how far back the course's start_at sits; controls
         the sync cutoff. Default 21 preserves prior test semantics.
+    conversation_details: optional {conv_id: {'messages': [...]}} overrides
+        for client.get_conversation (the per-message detail fetch the sync
+        phases now use). When a conversation isn't given an explicit entry
+        here, one is auto-derived: a single message dated at that
+        conversation's summary timestamp, with id = conv['id'] * 100 + 1
+        (deterministic, so tests can assert on it), authored by
+        `instructor_id` for `conversations` entries or by the first
+        non-instructor participant for `inbox` entries. Pass an explicit
+        override when a test needs more than one message per conversation
+        (e.g. both an instructor and a student message in the same thread).
     """
     mock = MagicMock()
     mock.get_enrollments.return_value = enrollments or []
@@ -60,6 +73,29 @@ def _make_client(enrollments=None, conversations=None, inbox=None,
         return iter([(convs, False)] if convs else [])
 
     mock.stream_conversations.side_effect = _stream
+
+    details = dict(conversation_details or {})
+
+    def _default_detail(conv, is_inbox):
+        ts = conv.get('last_authored_message_at') or conv.get('last_message_at')
+        if not ts:
+            return {'id': conv['id'], 'messages': []}
+        if is_inbox:
+            participant_ids = [p['id'] for p in conv.get('participants', [])]
+            author_id = next((pid for pid in participant_ids if pid != instructor_id), instructor_id)
+        else:
+            author_id = instructor_id
+        return {
+            'id': conv['id'],
+            'messages': [{'id': conv['id'] * 100 + 1, 'created_at': ts, 'author_id': author_id}],
+        }
+
+    for conv in sent_convs:
+        details.setdefault(conv['id'], _default_detail(conv, is_inbox=False))
+    for conv in inbox_convs:
+        details.setdefault(conv['id'], _default_detail(conv, is_inbox=True))
+
+    mock.get_conversation.side_effect = lambda conv_id: details.get(conv_id, {'id': conv_id, 'messages': []})
 
     mock.get_discussion_topics.return_value = topics or []
 
@@ -91,7 +127,7 @@ def test_sync_creates_conversation_event():
         enrollments=[{'user_id': STUDENT_A}],
         conversations=[{
             'id': 1001,
-            'last_authored_at': _days_ago(2),
+            'last_authored_message_at': _days_ago(2),
             'participants': [{'id': STUDENT_A}],
         }],
     )
@@ -102,7 +138,7 @@ def test_sync_creates_conversation_event():
     assert len(events) == 1
     assert events[0].event_type == 'conversation'
     assert events[0].student_canvas_id == STUDENT_A
-    assert events[0].source_id == 1001
+    assert events[0].source_id == 100101  # auto-derived message id: 1001 * 100 + 1
 
 
 def test_sync_ignores_non_enrolled_participants():
@@ -111,7 +147,7 @@ def test_sync_ignores_non_enrolled_participants():
         enrollments=[{'user_id': STUDENT_A}],
         conversations=[{
             'id': 1001,
-            'last_authored_at': _days_ago(2),
+            'last_authored_message_at': _days_ago(2),
             'participants': [{'id': 999}],  # 999 is not enrolled
         }],
     )
@@ -127,7 +163,7 @@ def test_sync_creates_one_event_per_enrolled_participant():
         enrollments=[{'user_id': STUDENT_A}, {'user_id': STUDENT_B}],
         conversations=[{
             'id': 1001,
-            'last_authored_at': _days_ago(2),
+            'last_authored_message_at': _days_ago(2),
             'participants': [{'id': STUDENT_A}, {'id': STUDENT_B}],
         }],
     )
@@ -143,7 +179,7 @@ def test_sync_skips_conversation_without_timestamp():
         enrollments=[{'user_id': STUDENT_A}],
         conversations=[{
             'id': 1001,
-            'last_authored_at': None,
+            'last_authored_message_at': None,
             'last_message_at': None,
             'participants': [{'id': STUDENT_A}],
         }],
@@ -152,6 +188,36 @@ def test_sync_skips_conversation_without_timestamp():
         _run()
 
     assert InteractionEvent.query.count() == 0
+
+
+def test_sync_two_messages_same_thread_create_two_events():
+    """Regression test for the reported bug: Canvas threads repeat messages to
+    the same student into one conversation, but each individual message must
+    still produce its own event — not overwrite the other's date (the actual
+    symptom reported: sending a second message erased the first message's
+    day from the timeline)."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        conversations=[{
+            'id': 1001,
+            'last_authored_message_at': _days_ago(1),
+            'participants': [{'id': STUDENT_A}],
+        }],
+        conversation_details={
+            1001: {'id': 1001, 'messages': [
+                {'id': 9001, 'created_at': _days_ago(1), 'author_id': INSTRUCTOR_ID},
+                {'id': 9002, 'created_at': _days_ago(2), 'author_id': INSTRUCTOR_ID},
+            ]},
+        },
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    events = InteractionEvent.query.filter_by(event_type='conversation').all()
+    assert len(events) == 2
+    dates = {e.occurred_at.date() for e in events}
+    assert len(dates) == 2  # two distinct days, neither overwrote the other
+    assert {e.source_id for e in events} == {9001, 9002}
 
 
 # ---------------------------------------------------------------------------
@@ -257,7 +323,7 @@ def test_sync_ignores_discussion_entries_by_non_students():
 def test_sync_upsert_is_idempotent():
     """Running sync twice with identical data produces the same row count."""
     enrollments = [{'user_id': STUDENT_A}]
-    conversations = [{'id': 1001, 'last_authored_at': _days_ago(2), 'participants': [{'id': STUDENT_A}]}]
+    conversations = [{'id': 1001, 'last_authored_message_at': _days_ago(2), 'participants': [{'id': STUDENT_A}]}]
 
     client1 = _make_client(enrollments=enrollments, conversations=conversations)
     with patch('app.services.sync.CanvasClient', return_value=client1):
@@ -288,8 +354,8 @@ def test_sync_no_enrollments_returns_zero():
 def test_sync_final_count_matches_events_created():
     enrollments = [{'user_id': STUDENT_A}, {'user_id': STUDENT_B}]
     conversations = [
-        {'id': 1001, 'last_authored_at': _days_ago(1), 'participants': [{'id': STUDENT_A}]},
-        {'id': 1002, 'last_authored_at': _days_ago(2), 'participants': [{'id': STUDENT_B}]},
+        {'id': 1001, 'last_authored_message_at': _days_ago(1), 'participants': [{'id': STUDENT_A}]},
+        {'id': 1002, 'last_authored_message_at': _days_ago(2), 'participants': [{'id': STUDENT_B}]},
     ]
     client = _make_client(enrollments=enrollments, conversations=conversations)
     with patch('app.services.sync.CanvasClient', return_value=client):
@@ -320,7 +386,7 @@ def test_sync_creates_student_message_event():
     assert len(events) == 1
     assert events[0].event_type == 'student_message'
     assert events[0].student_canvas_id == STUDENT_A
-    assert events[0].source_id == 2001
+    assert events[0].source_id == 200101  # auto-derived message id: 2001 * 100 + 1
 
 
 def test_sync_student_message_ignores_non_enrolled():
@@ -353,13 +419,46 @@ def test_sync_student_message_skips_missing_timestamp():
     assert InteractionEvent.query.count() == 0
 
 
+def test_sync_student_message_ignores_instructor_authored_messages_in_thread():
+    """A thread can contain both the student's message and the instructor's
+    own reply in it — only the student-authored message should count as a
+    'student_message' event."""
+    client = _make_client(
+        enrollments=[{'user_id': STUDENT_A}],
+        inbox=[{
+            'id': 2001,
+            'last_message_at': _days_ago(1),
+            'participants': [{'id': STUDENT_A}],
+        }],
+        conversation_details={
+            2001: {'id': 2001, 'messages': [
+                {'id': 9101, 'created_at': _days_ago(1), 'author_id': STUDENT_A},
+                {'id': 9102, 'created_at': _days_ago(2), 'author_id': INSTRUCTOR_ID},
+            ]},
+        },
+    )
+    with patch('app.services.sync.CanvasClient', return_value=client):
+        _run()
+
+    events = InteractionEvent.query.filter_by(event_type='student_message').all()
+    assert len(events) == 1
+    assert events[0].source_id == 9101
+
+
 def test_sync_sent_and_inbox_same_conversation_creates_two_event_types():
-    """Same conversation ID can produce both 'conversation' and 'student_message' rows."""
+    """Same conversation ID can produce both 'conversation' and 'student_message'
+    rows — the shared thread's detail carries one message from each author."""
     enrollments = [{'user_id': STUDENT_A}]
     client = _make_client(
         enrollments=enrollments,
-        conversations=[{'id': 1001, 'last_authored_at': _days_ago(2), 'participants': [{'id': STUDENT_A}]}],
+        conversations=[{'id': 1001, 'last_authored_message_at': _days_ago(2), 'participants': [{'id': STUDENT_A}]}],
         inbox=[{'id': 1001, 'last_message_at': _days_ago(1), 'participants': [{'id': STUDENT_A}]}],
+        conversation_details={
+            1001: {'id': 1001, 'messages': [
+                {'id': 100101, 'created_at': _days_ago(2), 'author_id': INSTRUCTOR_ID},
+                {'id': 100102, 'created_at': _days_ago(1), 'author_id': STUDENT_A},
+            ]},
+        },
     )
     with patch('app.services.sync.CanvasClient', return_value=client):
         _run()
@@ -449,7 +548,7 @@ def test_sync_marker_written_after_live_fetch():
     """A live conversation fetch should write a sync_marker row to canvas_cache."""
     client = _make_client(
         enrollments=[{'user_id': STUDENT_A}],
-        conversations=[{'id': 1001, 'last_authored_at': _days_ago(2), 'participants': [{'id': STUDENT_A}]}],
+        conversations=[{'id': 1001, 'last_authored_message_at': _days_ago(2), 'participants': [{'id': STUDENT_A}]}],
     )
     with patch('app.services.sync.CanvasClient', return_value=client):
         _run()
@@ -535,8 +634,8 @@ def test_sync_done_message_has_students_count():
     client = _make_client(
         enrollments=[{'user_id': STUDENT_A}, {'user_id': STUDENT_B}],
         conversations=[
-            {'id': 1001, 'last_authored_at': _days_ago(2), 'participants': [{'id': STUDENT_A}]},
-            {'id': 1002, 'last_authored_at': _days_ago(3), 'participants': [{'id': STUDENT_B}]},
+            {'id': 1001, 'last_authored_message_at': _days_ago(2), 'participants': [{'id': STUDENT_A}]},
+            {'id': 1002, 'last_authored_message_at': _days_ago(3), 'participants': [{'id': STUDENT_B}]},
         ],
     )
     with patch('app.services.sync.CanvasClient', return_value=client):
@@ -583,7 +682,7 @@ def test_sync_parallel_phases_all_contribute_events():
         enrollments=[{'user_id': STUDENT_A}],
         conversations=[{
             'id': 1001,
-            'last_authored_at': _days_ago(2),
+            'last_authored_message_at': _days_ago(2),
             'participants': [{'id': STUDENT_A}],
         }],
         inbox=[{
@@ -619,7 +718,7 @@ def test_sync_parallel_phase_failure_does_not_block_others():
         enrollments=[{'user_id': STUDENT_A}],
         conversations=[{
             'id': 1001,
-            'last_authored_at': _days_ago(2),
+            'last_authored_message_at': _days_ago(2),
             'participants': [{'id': STUDENT_A}],
         }],
     )
@@ -882,7 +981,7 @@ def test_sync_submission_error_does_not_abort_saving():
         enrollments=[{'user_id': STUDENT_A}],
         conversations=[{
             'id': 1001,
-            'last_authored_at': _days_ago(2),
+            'last_authored_message_at': _days_ago(2),
             'participants': [{'id': STUDENT_A}],
         }],
     )

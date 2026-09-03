@@ -163,6 +163,12 @@ class CanvasClient:
             ttl=TTL_CONVERSATIONS,
         )
 
+    def get_conversation(self, conversation_id):
+        """Full detail for one conversation, including individual messages
+        (each with its own id/created_at/author_id) — the list endpoint above
+        only returns thread-level summaries, not per-message data."""
+        return self._get(f'/api/v1/conversations/{conversation_id}', ttl=TTL_CONVERSATIONS)
+
     # When stream_conversations is called with a since date (sync context),
     # only trust the cache if it was fetched very recently.  The normal 2-hour
     # TTL is too long — a student reply that arrives between the cache snapshot

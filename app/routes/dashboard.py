@@ -403,12 +403,18 @@ def course(course_id):
         rows = db.session.execute(text("""
             SELECT (e->>'id')::bigint AS source_id, e->>'message' AS message
             FROM canvas_cache,
-                 jsonb_array_elements(response_json::jsonb) AS e
+                 jsonb_array_elements(
+                     CASE WHEN jsonb_typeof(response_json::jsonb) = 'array'
+                     THEN response_json::jsonb ELSE '[]'::jsonb END
+                 ) AS e
             WHERE (e->>'id')::bigint = ANY(:ids)
             UNION ALL
             SELECT (r->>'id')::bigint AS source_id, r->>'message' AS message
             FROM canvas_cache,
-                 jsonb_array_elements(response_json::jsonb) AS e,
+                 jsonb_array_elements(
+                     CASE WHEN jsonb_typeof(response_json::jsonb) = 'array'
+                     THEN response_json::jsonb ELSE '[]'::jsonb END
+                 ) AS e,
                  jsonb_array_elements(
                      CASE WHEN jsonb_typeof(e->'recent_replies') = 'array'
                      THEN e->'recent_replies' ELSE '[]'::jsonb END
@@ -421,17 +427,36 @@ def course(course_id):
             if texts:
                 disc_messages[(sid, day)] = '\n\n---\n\n'.join(texts)
 
-    # Fetch conversation text from the canvas cache
+    # Fetch conversation text from the canvas cache. source_id is a message
+    # id for events recorded after the per-message fix (matched against
+    # cached conversation-detail blobs, which hold a single object with a
+    # "messages" array) — with a fallback to the old conversation-id scheme
+    # for historical rows recorded before that fix (matched against cached
+    # conversation-list blobs, which hold an array of conversation summaries).
     msg_texts = {}
     all_msg_ids = [src for ids in msg_source_ids.values() for src in ids]
     if all_msg_ids:
         rows = db.session.execute(text("""
+            SELECT (m->>'id')::bigint AS source_id,
+                   NULL::text AS subject,
+                   m->>'body' AS authored,
+                   NULL::text AS last_msg
+            FROM canvas_cache,
+                 jsonb_array_elements(response_json::jsonb -> 'messages') AS m
+            WHERE response_json::jsonb ? 'messages'
+              AND (m->>'id')::bigint = ANY(:ids)
+
+            UNION ALL
+
             SELECT (e->>'id')::bigint AS source_id,
                    e->>'subject'              AS subject,
                    e->>'last_authored_message' AS authored,
                    e->>'last_message'          AS last_msg
             FROM canvas_cache,
-                 jsonb_array_elements(response_json::jsonb) AS e
+                 jsonb_array_elements(
+                     CASE WHEN jsonb_typeof(response_json::jsonb) = 'array'
+                     THEN response_json::jsonb ELSE '[]'::jsonb END
+                 ) AS e
             WHERE (e->>'id')::bigint = ANY(:ids)
         """), {'ids': all_msg_ids}).fetchall()
         conv_by_source = {}
@@ -455,7 +480,10 @@ def course(course_id):
         rows = db.session.execute(text("""
             SELECT (r->>'id')::bigint AS source_id, r->>'message' AS message
             FROM canvas_cache,
-                 jsonb_array_elements(response_json::jsonb) AS e,
+                 jsonb_array_elements(
+                     CASE WHEN jsonb_typeof(response_json::jsonb) = 'array'
+                     THEN response_json::jsonb ELSE '[]'::jsonb END
+                 ) AS e,
                  jsonb_array_elements(
                      CASE WHEN jsonb_typeof(e->'recent_replies') = 'array'
                      THEN e->'recent_replies' ELSE '[]'::jsonb END
@@ -480,7 +508,10 @@ def course(course_id):
             SELECT (s->>'id')::bigint AS sub_id,
                    (s->>'assignment_id')::bigint AS assignment_id
             FROM canvas_cache,
-                 jsonb_array_elements(response_json::jsonb) AS s
+                 jsonb_array_elements(
+                     CASE WHEN jsonb_typeof(response_json::jsonb) = 'array'
+                     THEN response_json::jsonb ELSE '[]'::jsonb END
+                 ) AS s
             WHERE (s->>'assignment_id') IS NOT NULL
               AND (s->>'id')::bigint = ANY(:ids)
         """), {'ids': all_hw_ids}).fetchall()
@@ -494,7 +525,10 @@ def course(course_id):
                        a->>'name' AS name,
                        a->>'due_at' AS due_at
                 FROM canvas_cache,
-                     jsonb_array_elements(response_json::jsonb) AS a
+                     jsonb_array_elements(
+                         CASE WHEN jsonb_typeof(response_json::jsonb) = 'array'
+                         THEN response_json::jsonb ELSE '[]'::jsonb END
+                     ) AS a
                 WHERE (a->>'id')::bigint = ANY(:ids)
             """), {'ids': list(assignment_ids)}).fetchall()
             assignment_info = {}
@@ -659,12 +693,15 @@ def student(course_id, student_id):
     if disc_ids:
         rows = db.session.execute(text("""
             SELECT (e->>'id')::bigint AS sid, e->>'message' AS msg
-            FROM canvas_cache, jsonb_array_elements(response_json::jsonb) AS e
+            FROM canvas_cache,
+                 jsonb_array_elements(CASE WHEN jsonb_typeof(response_json::jsonb)='array'
+                     THEN response_json::jsonb ELSE '[]'::jsonb END) AS e
             WHERE (e->>'id')::bigint = ANY(:ids)
             UNION ALL
             SELECT (r->>'id')::bigint, r->>'message'
             FROM canvas_cache,
-                 jsonb_array_elements(response_json::jsonb) AS e,
+                 jsonb_array_elements(CASE WHEN jsonb_typeof(response_json::jsonb)='array'
+                     THEN response_json::jsonb ELSE '[]'::jsonb END) AS e,
                  jsonb_array_elements(CASE WHEN jsonb_typeof(e->'recent_replies')='array'
                      THEN e->'recent_replies' ELSE '[]'::jsonb END) AS r
             WHERE (r->>'id')::bigint = ANY(:ids)
@@ -678,21 +715,39 @@ def student(course_id, student_id):
         rows = db.session.execute(text("""
             SELECT (r->>'id')::bigint AS sid, r->>'message' AS msg
             FROM canvas_cache,
-                 jsonb_array_elements(response_json::jsonb) AS e,
+                 jsonb_array_elements(CASE WHEN jsonb_typeof(response_json::jsonb)='array'
+                     THEN response_json::jsonb ELSE '[]'::jsonb END) AS e,
                  jsonb_array_elements(CASE WHEN jsonb_typeof(e->'recent_replies')='array'
                      THEN e->'recent_replies' ELSE '[]'::jsonb END) AS r
             WHERE (r->>'id')::bigint = ANY(:ids)
         """), {'ids': instr_disc_ids}).fetchall()
         instr_reply_text_by_src = {r.sid: _strip_html(r.msg) for r in rows}
 
+    # See course()'s msg_texts comment: message-id scheme (new) first, with a
+    # fallback to the old conversation-id scheme for historical rows.
     conv_text_by_src = {}
     if msg_ids:
         rows = db.session.execute(text("""
+            SELECT (m->>'id')::bigint AS sid,
+                   NULL::text AS subject,
+                   m->>'body' AS authored,
+                   NULL::text AS last_msg
+            FROM canvas_cache,
+                 jsonb_array_elements(response_json::jsonb -> 'messages') AS m
+            WHERE response_json::jsonb ? 'messages'
+              AND (m->>'id')::bigint = ANY(:ids)
+
+            UNION ALL
+
             SELECT (e->>'id')::bigint AS sid,
                    e->>'subject' AS subject,
                    e->>'last_authored_message' AS authored,
                    e->>'last_message' AS last_msg
-            FROM canvas_cache, jsonb_array_elements(response_json::jsonb) AS e
+            FROM canvas_cache,
+                 jsonb_array_elements(
+                     CASE WHEN jsonb_typeof(response_json::jsonb) = 'array'
+                     THEN response_json::jsonb ELSE '[]'::jsonb END
+                 ) AS e
             WHERE (e->>'id')::bigint = ANY(:ids)
         """), {'ids': msg_ids}).fetchall()
         for r in rows:
@@ -960,15 +1015,31 @@ def compose(course_id, student_id):
             new_conv = result[0] if isinstance(result, list) and result else None
 
             if new_conv:
-                # Record the event directly — no re-fetch needed
-                ts_str      = new_conv.get('last_authored_at') or new_conv.get('last_message_at')
-                occurred_at = datetime.fromisoformat(ts_str) if ts_str else now
+                # Fetch full detail to get this specific message's own id/
+                # timestamp — Canvas threads every message to the same
+                # recipient together, so the conversation's own id is shared
+                # across the whole thread and can't key a single contact
+                # event without overwriting earlier messages in it.
+                message_id, occurred_at = None, now
+                try:
+                    detail = client.get_conversation(new_conv['id'])
+                    latest_msg = (detail.get('messages') or [None])[0]
+                    if latest_msg:
+                        message_id = latest_msg['id']
+                        created_str = latest_msg.get('created_at')
+                        if created_str:
+                            occurred_at = datetime.fromisoformat(created_str)
+                except Exception:
+                    pass
+                if message_id is None:
+                    message_id = new_conv['id']  # degrade gracefully rather than drop the event
+
                 stmt = pg_insert(InteractionEvent.__table__).values([{
                     'course_id': course_id,
                     'student_canvas_id': student_id,
                     'event_type': 'conversation',
                     'occurred_at': occurred_at,
-                    'source_id': new_conv['id'],
+                    'source_id': message_id,
                 }])
                 stmt = stmt.on_conflict_do_update(
                     constraint='uq_interaction_event_type_source_student',
@@ -1084,14 +1155,28 @@ def group_compose(course_id):
                 result = client.send_message(recip['id'], filled_subject, filled_body, course_id=course_id)
                 new_conv = result[0] if isinstance(result, list) and result else None
                 if new_conv:
-                    ts_str = new_conv.get('last_authored_at') or new_conv.get('last_message_at')
-                    occurred_at = datetime.fromisoformat(ts_str) if ts_str else now
+                    # See compose()'s comment — key on this specific message's
+                    # id, not the shared conversation-thread id.
+                    message_id, occurred_at = None, now
+                    try:
+                        detail = client.get_conversation(new_conv['id'])
+                        latest_msg = (detail.get('messages') or [None])[0]
+                        if latest_msg:
+                            message_id = latest_msg['id']
+                            created_str = latest_msg.get('created_at')
+                            if created_str:
+                                occurred_at = datetime.fromisoformat(created_str)
+                    except Exception:
+                        pass
+                    if message_id is None:
+                        message_id = new_conv['id']
+
                     events.append({
                         'course_id': course_id,
                         'student_canvas_id': recip['id'],
                         'event_type': 'group_conversation',
                         'occurred_at': occurred_at,
-                        'source_id': new_conv['id'],
+                        'source_id': message_id,
                         'group_id': gid,
                     })
                 sent_count += 1

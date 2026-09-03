@@ -44,6 +44,13 @@ def _mock_client(enrollments=None):
     mock.get_courses.return_value = [
         {'id': COURSE_ID, 'name': 'Test Course', 'course_code': 'CS101', 'term': None},
     ]
+    # Safe default for the post-send detail fetch compose()/group_compose()
+    # now make: no messages, so the route falls back to the conversation's
+    # own id. Without this, an unconfigured MagicMock silently chains through
+    # detail.get('messages')[0]['id'] instead of raising, so the try/except
+    # fallback never triggers and a MagicMock ends up headed for the DB.
+    # Tests that care about the exact message id override this explicitly.
+    mock.get_conversation.return_value = {'id': None, 'messages': []}
     return mock
 
 
@@ -626,14 +633,25 @@ def test_compose_get_200(client):
     assert b'Alice Smith' in response.data
 
 
-def _compose_post(client, conv_response=None):
-    """Helper: POST to compose with a mocked send_message return value."""
+def _compose_post(client, conv_response=None, message_id=8888,
+                  message_created_at='2026-03-06T12:00:00+00:00'):
+    """Helper: POST to compose with a mocked send_message return value.
+
+    Also mocks get_conversation (the follow-up detail fetch compose() now
+    makes) to return a single message — message_id/message_created_at are
+    what should end up as the InteractionEvent's source_id/occurred_at,
+    distinct from the conversation's own id in conv_response.
+    """
     from app.services.canvas_client import CanvasClient as _RealClient
     if conv_response is None:
-        conv_response = [{'id': 9999, 'last_authored_at': '2026-03-06T12:00:00+00:00'}]
+        conv_response = [{'id': 9999}]
     with patch('app.routes.dashboard.CanvasClient') as MockClass:
         MockClass.return_value = _mock_client_with_name('Alice Smith')
         MockClass.return_value.send_message.return_value = conv_response
+        MockClass.return_value.get_conversation.return_value = {
+            'id': conv_response[0]['id'] if conv_response else None,
+            'messages': [{'id': message_id, 'created_at': message_created_at}],
+        }
         MockClass._make_cache_key.side_effect = _RealClient._make_cache_key
         return client.post(
             f'/course/{COURSE_ID}/student/{STUDENT_A}/compose',
@@ -649,15 +667,18 @@ def test_compose_post_redirects_to_student(client):
 
 
 def test_compose_post_writes_interaction_event(client):
-    """A successful send creates an InteractionEvent directly in the DB."""
+    """A successful send creates an InteractionEvent directly in the DB,
+    keyed by the message's own id (not the conversation's id) — see the
+    _compose_post docstring."""
     _compose_post(client)
     event = InteractionEvent.query.filter_by(
         course_id=COURSE_ID,
         student_canvas_id=STUDENT_A,
         event_type='conversation',
-        source_id=9999,
+        source_id=8888,
     ).first()
     assert event is not None
+    assert event.occurred_at.isoformat().startswith('2026-03-06T12:00:00')
 
 
 def test_compose_post_prepends_to_sent_cache(client):
@@ -690,6 +711,26 @@ def test_compose_post_creates_sent_cache_when_missing(client):
     entry = CanvasCache.query.filter_by(cache_key=sent_key).first()
     assert entry is not None
     assert entry.response_json[0]['id'] == 9999
+
+
+def test_compose_post_two_sends_to_same_student_both_recorded(client):
+    """Regression test: Canvas threads repeat messages to the same student
+    into one conversation (same conv id both times), but two separate sends
+    on two different days must produce two separate events — not one
+    overwriting the other's date."""
+    from app.services.canvas_client import CanvasClient as _RealClient
+
+    _compose_post(client, conv_response=[{'id': 9999}],
+                  message_id=8888, message_created_at='2026-03-05T12:00:00+00:00')
+    _compose_post(client, conv_response=[{'id': 9999}],
+                  message_id=8889, message_created_at='2026-03-06T12:00:00+00:00')
+
+    events = InteractionEvent.query.filter_by(
+        course_id=COURSE_ID, student_canvas_id=STUDENT_A, event_type='conversation',
+    ).all()
+    assert len(events) == 2
+    assert {e.source_id for e in events} == {8888, 8889}
+    assert {e.occurred_at.date().isoformat() for e in events} == {'2026-03-05', '2026-03-06'}
 
 
 # ---------------------------------------------------------------------------
@@ -991,6 +1032,77 @@ def test_group_compose_post_creates_group_conversation_events(client):
     assert student_ids == {STUDENT_A, STUDENT_B}
 
 
+def test_group_compose_post_event_source_id_is_message_not_conversation(client):
+    """The event's source_id should be the specific message's id (from the
+    get_conversation detail fetch), not the shared conversation id."""
+    from app.services.canvas_client import CanvasClient as _RealClient
+    with patch('app.routes.dashboard.CanvasClient') as MockClass:
+        mock = _mock_group_client()
+        mock.send_message.return_value = [{'id': 5001}]
+        mock.get_conversation.return_value = {
+            'id': 5001,
+            'messages': [{'id': 7777, 'created_at': '2026-03-06T12:00:00+00:00'}],
+        }
+        MockClass.return_value = mock
+        MockClass._make_cache_key.side_effect = _RealClient._make_cache_key
+        client.post(
+            f'/course/{COURSE_ID}/group-compose',
+            data={'students': str(STUDENT_A), 'subject': 'Hi', 'body': 'Hello'},
+        )
+
+    event = InteractionEvent.query.filter_by(event_type='group_conversation').first()
+    assert event is not None
+    assert event.source_id == 7777
+    assert event.occurred_at.isoformat().startswith('2026-03-06T12:00:00')
+
+
+def test_group_compose_post_two_sends_same_student_both_show_as_active_days(client):
+    """The literal reported bug, end to end: group-message a student, then
+    group-message them again on a different day — both days must render as
+    active in course()'s timeline, not just the most recent one."""
+    from app.services.canvas_client import CanvasClient as _RealClient
+
+    def _send(conv_id, message_id, created_at):
+        with patch('app.routes.dashboard.CanvasClient') as MockClass:
+            mock = _mock_group_client()
+            mock.send_message.return_value = [{'id': conv_id}]
+            mock.get_conversation.return_value = {
+                'id': conv_id,
+                'messages': [{'id': message_id, 'created_at': created_at}],
+            }
+            MockClass.return_value = mock
+            MockClass._make_cache_key.side_effect = _RealClient._make_cache_key
+            client.post(
+                f'/course/{COURSE_ID}/group-compose',
+                data={'students': str(STUDENT_A), 'subject': 'Hi', 'body': 'Hello'},
+            )
+
+    day1 = (datetime.now(timezone.utc) - timedelta(days=3)).strftime('%Y-%m-%dT%H:%M:%S+00:00')
+    day2 = (datetime.now(timezone.utc) - timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%S+00:00')
+    # Same conversation id both times — Canvas threads repeat messages to the
+    # same recipient together; distinct message ids, as real messages have.
+    _send(conv_id=6001, message_id=7001, created_at=day1)
+    _send(conv_id=6001, message_id=7002, created_at=day2)
+
+    events = InteractionEvent.query.filter_by(
+        course_id=COURSE_ID, student_canvas_id=STUDENT_A, event_type='group_conversation',
+    ).all()
+    assert len(events) == 2
+    assert {e.occurred_at.date() for e in events} == {
+        (datetime.now(timezone.utc) - timedelta(days=3)).date(),
+        (datetime.now(timezone.utc) - timedelta(days=1)).date(),
+    }
+
+    with patch('app.routes.dashboard.CanvasClient', return_value=_mock_group_client()):
+        response = client.get(f'/course/{COURSE_ID}')
+    html = response.data.decode()
+    # Each active day-cell renders its own <use href="#ico-grp"/> — this
+    # substring only ever appears there (not in the icon <symbol> definition
+    # or the "icon-grp" CSS class), so exactly 2 means exactly 2 distinct
+    # active days rendered, not one day overwriting the other.
+    assert html.count('href="#ico-grp"') == 2
+
+
 def test_group_compose_post_fills_placeholders_per_student(client):
     _seed_event(days_ago=3, student_id=STUDENT_A, source_id=3001)
     from app.services.canvas_client import CanvasClient as _RealClient
@@ -1117,3 +1229,55 @@ def test_compose_shows_dropped_student_name(client):
         response = client.get(f'/course/{COURSE_ID}/student/{STUDENT_A}/compose')
     assert response.status_code == 200
     assert b'Alice Smith' in response.data
+
+
+# ---------------------------------------------------------------------------
+# Conversation hover text (message-id cache lookup)
+# ---------------------------------------------------------------------------
+
+def test_course_page_shows_conversation_message_text_in_tooltip(client):
+    """Hover text for a conversation-type event is looked up by matching the
+    event's source_id (a message id, post-fix) against a cached
+    conversation-detail blob's messages array — not the old conversation-list
+    cache, which only has thread-level summaries."""
+    from app.services.canvas_client import CanvasClient as _RealClient
+    _seed_event(days_ago=1, student_id=STUDENT_A, source_id=7777, event_type='conversation')
+    cache_key = _RealClient._make_cache_key('/api/v1/conversations/9999', None)
+    db.session.add(CanvasCache(
+        cache_key=cache_key,
+        response_json={'id': 9999, 'messages': [
+            {'id': 7777, 'body': 'Checking in on your progress, Alice.',
+             'created_at': '2026-03-05T12:00:00+00:00'},
+        ]},
+        fetched_at=datetime.now(timezone.utc),
+        ttl_seconds=7200,
+    ))
+    db.session.commit()
+
+    with patch('app.routes.dashboard.run_sync', return_value=0), \
+         patch('app.routes.dashboard.CanvasClient', return_value=_mock_client()):
+        # 'conversation'-type events only render on the Instructor Contact
+        # tab, not the default timeline tab.
+        response = client.get(f'/course/{COURSE_ID}?tab=submissions')
+    assert 'Checking in on your progress, Alice.' in response.data.decode()
+
+
+def test_student_page_shows_conversation_message_text_in_drawer(client):
+    """Same lookup, on the student detail page's per-day drawer payload."""
+    from app.services.canvas_client import CanvasClient as _RealClient
+    _seed_event(days_ago=1, student_id=STUDENT_A, source_id=7778, event_type='conversation')
+    cache_key = _RealClient._make_cache_key('/api/v1/conversations/9998', None)
+    db.session.add(CanvasCache(
+        cache_key=cache_key,
+        response_json={'id': 9998, 'messages': [
+            {'id': 7778, 'body': 'Following up on the last assignment.',
+             'created_at': '2026-03-05T12:00:00+00:00'},
+        ]},
+        fetched_at=datetime.now(timezone.utc),
+        ttl_seconds=7200,
+    ))
+    db.session.commit()
+
+    with patch('app.routes.dashboard.CanvasClient', return_value=_mock_client_with_name('Alice Smith')):
+        response = client.get(f'/course/{COURSE_ID}/student/{STUDENT_A}')
+    assert 'Following up on the last assignment.' in response.data.decode()

@@ -57,7 +57,7 @@ def _enrollment_cache_key(course_id):
 # Phase functions — each puts progress messages on a Queue and returns events
 # ---------------------------------------------------------------------------
 
-def _phase_conversations(client, course_id, student_ids, cutoff, progress_q):
+def _phase_conversations(client, course_id, student_ids, cutoff, instructor_id, progress_q):
     phase = 'conversations'
     progress_q.put({'status': 'start', 'phase': phase})
     t0 = time.perf_counter()
@@ -79,21 +79,46 @@ def _phase_conversations(client, course_id, student_ids, cutoff, progress_q):
                 progress_q.put({'status': 'page', 'phase': phase, 'n': page_n, 'count': len(page)})
         if fetched_live:
             _set_sync_marker(course_id, 'conv_sent')
+
+        # The list view only gives a thread-level summary (one shared id per
+        # conversation, one "latest activity" timestamp) — Canvas threads all
+        # messages to the same recipient together, so a student messaged
+        # twice on different days would collapse onto one row keyed by that
+        # shared id. Fetch each relevant thread's full detail (real per-
+        # message ids/timestamps/authors) so every distinct message gets its
+        # own event instead of overwriting the last one.
         for conv in conversations:
-            ts_str = conv.get('last_authored_at') or conv.get('last_message_at')
-            if not ts_str:
+            summary_ts = conv.get('last_authored_message_at') or conv.get('last_message_at')
+            if not summary_ts or datetime.fromisoformat(summary_ts) < since:
                 continue
-            occurred_at = datetime.fromisoformat(ts_str)
             participant_ids = {p['id'] for p in conv.get('participants', [])}
-            for sid in participant_ids & student_ids:
-                events.append({
-                    'course_id': course_id,
-                    'student_canvas_id': sid,
-                    'event_type': 'conversation',
-                    'occurred_at': occurred_at,
-                    'source_id': conv['id'],
-                })
-                matched += 1
+            relevant_students = participant_ids & student_ids
+            if not relevant_students:
+                continue
+
+            try:
+                detail = client.get_conversation(conv['id'])
+            except Exception:
+                continue
+
+            for msg in detail.get('messages', []):
+                if msg.get('author_id') != instructor_id:
+                    continue
+                created_str = msg.get('created_at')
+                if not created_str:
+                    continue
+                occurred_at = datetime.fromisoformat(created_str)
+                if occurred_at < since:
+                    continue
+                for sid in relevant_students:
+                    events.append({
+                        'course_id': course_id,
+                        'student_canvas_id': sid,
+                        'event_type': 'conversation',
+                        'occurred_at': occurred_at,
+                        'source_id': msg['id'],
+                    })
+                    matched += 1
     except Exception as exc:
         progress_q.put({'status': 'error', 'phase': phase, 'msg': str(exc)})
     progress_q.put({'status': 'done_phase', 'phase': phase, 'count': matched,
@@ -123,19 +148,39 @@ def _phase_student_messages(client, course_id, student_ids, cutoff, progress_q):
                 progress_q.put({'status': 'page', 'phase': phase, 'n': page_n, 'count': len(page)})
         if fetched_live:
             _set_sync_marker(course_id, 'conv_inbox')
+
+        # Same reasoning as _phase_conversations: fetch per-message detail so
+        # repeat messages from the same student don't collapse onto one row.
         for conv in inbox:
-            ts_str = conv.get('last_message_at')
-            if not ts_str:
+            summary_ts = conv.get('last_message_at')
+            if not summary_ts or datetime.fromisoformat(summary_ts) < since:
                 continue
-            occurred_at = datetime.fromisoformat(ts_str)
             participant_ids = {p['id'] for p in conv.get('participants', [])}
-            for sid in participant_ids & student_ids:
+            relevant_students = participant_ids & student_ids
+            if not relevant_students:
+                continue
+
+            try:
+                detail = client.get_conversation(conv['id'])
+            except Exception:
+                continue
+
+            for msg in detail.get('messages', []):
+                author_id = msg.get('author_id')
+                if author_id not in relevant_students:
+                    continue
+                created_str = msg.get('created_at')
+                if not created_str:
+                    continue
+                occurred_at = datetime.fromisoformat(created_str)
+                if occurred_at < since:
+                    continue
                 events.append({
                     'course_id': course_id,
-                    'student_canvas_id': sid,
+                    'student_canvas_id': author_id,
                     'event_type': 'student_message',
                     'occurred_at': occurred_at,
-                    'source_id': conv['id'],
+                    'source_id': msg['id'],
                 })
                 matched += 1
     except Exception as exc:
@@ -409,7 +454,7 @@ def sync_course(course_id):
     with ThreadPoolExecutor(max_workers=4) as executor:
         futures = [
             executor.submit(_in_context, _phase_conversations,
-                            client, course_id, student_ids, cutoff, progress_q),
+                            client, course_id, student_ids, cutoff, instructor_id, progress_q),
             executor.submit(_in_context, _phase_student_messages,
                             client, course_id, student_ids, cutoff, progress_q),
             executor.submit(_in_context, _phase_discussions,
