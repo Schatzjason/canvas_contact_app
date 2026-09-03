@@ -14,7 +14,30 @@
       font-size: 1.1rem;
       margin-bottom: 1rem;
     }
-    label {
+    .field {
+      margin-bottom: 1.5rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid #e4e2dc;
+    }
+    .field:last-of-type {
+      border-bottom: none;
+    }
+    .field-label {
+      display: block;
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin-bottom: 0.4rem;
+    }
+    #baseUrl {
+      width: 100%;
+      box-sizing: border-box;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 0.9rem;
+      padding: 0.5rem 0.6rem;
+      border: 1px solid #c8c4bb;
+      border-radius: 5px;
+    }
+    label.checkbox-label {
       display: flex;
       align-items: flex-start;
       gap: 0.5rem;
@@ -27,6 +50,8 @@
       color: #666;
       font-size: 0.85rem;
       margin-top: 0.5rem;
+    }
+    .checkbox-label + p.hint {
       margin-left: 1.5rem;
     }
     #status {
@@ -39,15 +64,29 @@
 </head>
 <body>
   <h1>Contact Tracker Link</h1>
-  <label>
-    <input type="checkbox" id="reuseTab" />
-    Reuse an existing tracker tab instead of opening a new one each time
-  </label>
-  <p class="hint">
-    When on, clicking "Open in Contact Tracker" reuses/focuses a tab already
-    showing the tracker app, if one is open. When off, every click opens a
-    brand-new tab.
-  </p>
+
+  <div class="field">
+    <label class="field-label" for="baseUrl">Tracker app URL</label>
+    <input type="text" id="baseUrl" placeholder="http://127.0.0.1:5000" />
+    <p class="hint">
+      Where your local Canvas Contact Tracker app is running. Change this if
+      you start it on a different port. Saves when you leave the field or
+      press Enter.
+    </p>
+  </div>
+
+  <div class="field">
+    <label class="checkbox-label">
+      <input type="checkbox" id="reuseTab" />
+      Reuse an existing tracker tab instead of opening a new one each time
+    </label>
+    <p class="hint">
+      When on, clicking "Open in Contact Tracker" reuses/focuses a tab already
+      showing the tracker app, if one is open. When off, every click opens a
+      brand-new tab.
+    </p>
+  </div>
+
   <div id="status"></div>
   <script src="options.js"></script>
 </body>

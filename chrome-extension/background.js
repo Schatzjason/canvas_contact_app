@@ -14,8 +14,14 @@ const CANVAS_USER_LINK = /^https:\/\/ccsf\.instructure\.com\/courses\/(\d+)\/(?:
 // e.g. .../courses/73658/gradebook/speed_grader?assignment_id=...&student_id=325786
 const SPEEDGRADER_URL = /^https:\/\/ccsf\.instructure\.com\/courses\/(\d+)\/gradebook\/speed_grader/;
 
-const TRACKER_BASE_URL = 'http://127.0.0.1:5000';
-const STORAGE_DEFAULTS = { reuseTab: true };
+const STORAGE_DEFAULTS = { reuseTab: true, baseUrl: 'http://127.0.0.1:5000' };
+
+async function getSettings() {
+  const settings = await chrome.storage.local.get(STORAGE_DEFAULTS);
+  // Strip any trailing slash so URL-building below doesn't produce "//".
+  settings.baseUrl = (settings.baseUrl || STORAGE_DEFAULTS.baseUrl).replace(/\/+$/, '');
+  return settings;
+}
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -44,11 +50,9 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-async function openTrackerUrl(targetUrl) {
-  const { reuseTab } = await chrome.storage.local.get(STORAGE_DEFAULTS);
-
-  if (reuseTab) {
-    const existing = await chrome.tabs.query({ url: `${TRACKER_BASE_URL}/*` });
+async function openTrackerUrl(targetUrl, settings) {
+  if (settings.reuseTab) {
+    const existing = await chrome.tabs.query({ url: `${settings.baseUrl}/*` });
     if (existing.length > 0) {
       const [tab] = existing;
       await chrome.tabs.update(tab.id, { url: targetUrl, active: true });
@@ -60,17 +64,19 @@ async function openTrackerUrl(targetUrl) {
   chrome.tabs.create({ url: targetUrl });
 }
 
-function openStudent(courseId, studentId) {
-  return openTrackerUrl(`${TRACKER_BASE_URL}/course/${courseId}/student/${studentId}`);
+async function openStudent(courseId, studentId) {
+  const settings = await getSettings();
+  return openTrackerUrl(`${settings.baseUrl}/course/${courseId}/student/${studentId}`, settings);
 }
 
 async function openInboxSearch() {
+  const settings = await getSettings();
   const { inboxStudentName } = await chrome.storage.local.get('inboxStudentName');
   if (!inboxStudentName) {
     console.warn('Contact Tracker: no student name captured for this click (right-click a conversation row in the list)');
     return;
   }
-  await openTrackerUrl(`${TRACKER_BASE_URL}/?q=${encodeURIComponent(inboxStudentName)}`);
+  await openTrackerUrl(`${settings.baseUrl}/?q=${encodeURIComponent(inboxStudentName)}`, settings);
 }
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
