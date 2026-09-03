@@ -788,6 +788,21 @@ def student(course_id, student_id):
         by_module = {'modules': [], 'columns': [], 'rows': [],
                      'drawer_payload': {}, 'has_modules': False}
 
+    student_labels = [
+        {'id': lid, 'name': name, 'color': color}
+        for lid, name, color in db.session.query(Label.id, Label.name, Label.color)
+            .join(StudentLabel, StudentLabel.label_id == Label.id)
+            .filter(
+                StudentLabel.course_id == course_id,
+                StudentLabel.student_canvas_id == student_id,
+            )
+            .order_by(Label.name)
+            .all()
+    ]
+
+    all_labels = [{'id': l.id, 'name': l.name, 'color': l.color}
+                  for l in Label.query.order_by(Label.name).all()]
+
     return render_template('dashboard/student.html',
         course=course_obj,
         student_id=student_id,
@@ -806,6 +821,9 @@ def student(course_id, student_id):
         check_back_note=check_back_note,
         is_dropped=is_dropped,
         by_module=by_module,
+        student_labels=student_labels,
+        all_labels=all_labels,
+        label_palette=LABEL_PALETTE,
     )
 
 
@@ -1236,6 +1254,16 @@ def apply_label(course_id):
     stmt = pg_insert(StudentLabel.__table__).values(rows)
     stmt = stmt.on_conflict_do_nothing(constraint='uq_student_label')
     db.session.execute(stmt)
+    db.session.commit()
+    return {'ok': True}
+
+
+@bp.route('/course/<int:course_id>/student/<int:student_id>/labels/<int:label_id>', methods=['DELETE'])
+def remove_student_label(course_id, student_id, label_id):
+    """Remove one label from one student — does not delete the Label itself."""
+    StudentLabel.query.filter_by(
+        course_id=course_id, student_canvas_id=student_id, label_id=label_id,
+    ).delete()
     db.session.commit()
     return {'ok': True}
 
