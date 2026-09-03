@@ -568,7 +568,19 @@ def course(course_id):
     display_name_row = CourseDisplayName.query.filter_by(course_id=course_id).first()
     display_name = display_name_row.name if display_name_row else course_obj.get('name', '')
 
-    labels = Label.query.order_by(Label.name).all()
+    labels = [{'id': l.id, 'name': l.name, 'color': l.color}
+              for l in Label.query.order_by(Label.name).all()]
+
+    student_labels = {}
+    label_rows = (
+        db.session.query(StudentLabel.student_canvas_id, Label.name, Label.color)
+        .join(Label, Label.id == StudentLabel.label_id)
+        .filter(StudentLabel.course_id == course_id)
+        .order_by(Label.name)
+        .all()
+    )
+    for sid, name, color in label_rows:
+        student_labels.setdefault(sid, []).append({'name': name, 'color': color})
 
     return render_template('dashboard/course.html',
         course=course_obj,
@@ -583,6 +595,7 @@ def course(course_id):
         active_tab=active_tab,
         labels=labels,
         label_palette=LABEL_PALETTE,
+        student_labels=student_labels,
     )
 
 
