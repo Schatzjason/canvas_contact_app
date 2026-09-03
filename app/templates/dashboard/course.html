@@ -464,24 +464,76 @@
   .label-pop-item {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     width: 100%;
     padding: 7px 8px;
     border-radius: 4px;
-    background: none;
-    border: none;
     cursor: pointer;
     font-family: var(--sans);
     font-size: 13px;
     color: var(--text-primary);
-    text-align: left;
+    flex-wrap: wrap;
   }
   .label-pop-item:hover { background: var(--bg); }
   .label-pop-dot {
-    width: 9px; height: 9px;
+    width: 12px; height: 12px;
     border-radius: 50%;
     flex-shrink: 0;
+    padding: 0;
+    border: 1px solid rgba(0,0,0,0.12);
+    cursor: pointer;
   }
+  .label-pop-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .label-pop-edit, .label-pop-delete {
+    flex-shrink: 0;
+    width: 18px; height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: none;
+    border-radius: 3px;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.1s ease;
+  }
+  .label-pop-item:hover .label-pop-edit,
+  .label-pop-item:hover .label-pop-delete { opacity: 1; }
+  .label-pop-edit:hover, .label-pop-delete:hover { background: var(--border); color: var(--text-primary); }
+  .label-pop-edit svg { width: 11px; height: 11px; }
+  .label-pop-delete { font-size: 15px; line-height: 1; }
+  .label-pop-rename-input {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--sans);
+    font-size: 13px;
+    padding: 2px 4px;
+    border: 1px solid var(--icon-message);
+    border-radius: 3px;
+    color: var(--text-primary);
+  }
+  .label-pop-swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    width: 100%;
+    padding: 6px 4px 2px 18px;
+  }
+  .label-pop-swatch {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    border: 1px solid rgba(0,0,0,0.12);
+    cursor: pointer;
+    padding: 0;
+  }
+  .label-pop-swatch.active { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--text-primary); }
   .label-pop-empty {
     padding: 7px 8px;
     font-size: 12px;
@@ -1018,6 +1070,7 @@
   if (!popover) return;
 
   var labels    = {{ labels | tojson }};  // [{id, name, color}, ...]
+  var PALETTE   = {{ label_palette | tojson }};
   var applyUrl  = {{ url_for('dashboard.apply_label', course_id=course.id) | tojson }};
   var createUrl = {{ url_for('dashboard.create_label') | tojson }};
 
@@ -1045,14 +1098,110 @@
     }
     listEl.innerHTML = '';
     labels.forEach(function (l) {
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'label-pop-item';
-      btn.innerHTML = '<span class="label-pop-dot" style="background:' + l.color + '"></span>' + escHtml(l.name);
-      btn.addEventListener('click', function () { applyLabel(l.id); });
-      listEl.appendChild(btn);
+      var row = document.createElement('div');
+      row.className = 'label-pop-item';
+      row.dataset.id = l.id;
+      row.innerHTML =
+        '<button type="button" class="label-pop-dot" style="background:' + l.color + '" title="Change color"></button>' +
+        '<span class="label-pop-name">' + escHtml(l.name) + '</span>' +
+        '<button type="button" class="label-pop-edit" title="Rename">' +
+          '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 1.5l3 3L5 14H2v-3L11.5 1.5z"/></svg>' +
+        '</button>' +
+        '<button type="button" class="label-pop-delete" title="Delete label">&times;</button>';
+      listEl.appendChild(row);
     });
   }
+
+  function findLabel(id) {
+    return labels.find(function (l) { return l.id === id; });
+  }
+
+  function startRename(row, label) {
+    var nameEl = row.querySelector('.label-pop-name');
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'label-pop-rename-input';
+    input.value = label.name;
+    input.maxLength = 50;
+    nameEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    var done = false;
+
+    function commit() {
+      if (done) return;
+      done = true;
+      var newName = input.value.trim();
+      if (!newName || newName === label.name) { renderList(); return; }
+      fetch('/labels/' + label.id, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: newName})
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        if (d.ok) label.name = d.label.name;
+        else showError(d.error || 'Could not rename label');
+        renderList();
+      });
+    }
+
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+      if (e.key === 'Escape') { done = true; renderList(); }
+    });
+  }
+
+  function toggleColorPicker(row, label) {
+    var existing = row.querySelector('.label-pop-swatches');
+    listEl.querySelectorAll('.label-pop-swatches').forEach(function (el) { el.remove(); });
+    if (existing) return;  // was already open on this row — just closed it
+
+    var swatches = document.createElement('div');
+    swatches.className = 'label-pop-swatches';
+    PALETTE.forEach(function (color) {
+      var sw = document.createElement('button');
+      sw.type = 'button';
+      sw.className = 'label-pop-swatch' + (color === label.color ? ' active' : '');
+      sw.style.background = color;
+      sw.addEventListener('click', function () {
+        fetch('/labels/' + label.id, {
+          method: 'PATCH',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({color: color})
+        }).then(function (r) { return r.json(); }).then(function (d) {
+          if (d.ok) label.color = d.label.color;
+          else showError(d.error || 'Could not change color');
+          renderList();
+        });
+      });
+      swatches.appendChild(sw);
+    });
+    row.appendChild(swatches);
+  }
+
+  function deleteLabel(id) {
+    fetch('/labels/' + id, { method: 'DELETE' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) { showError(d.error || 'Could not delete label'); return; }
+        labels = labels.filter(function (l) { return l.id !== id; });
+        renderList();
+      });
+  }
+
+  listEl.addEventListener('click', function (e) {
+    var row = e.target.closest('.label-pop-item');
+    if (!row) return;
+    var id = parseInt(row.dataset.id, 10);
+    var label = findLabel(id);
+    if (!label) return;
+
+    if (e.target.closest('.label-pop-delete')) { deleteLabel(id); return; }
+    if (e.target.closest('.label-pop-edit'))   { startRename(row, label); return; }
+    if (e.target.closest('.label-pop-dot'))    { toggleColorPicker(row, label); return; }
+    applyLabel(id);
+  });
 
   function getCheckedIds() {
     if (!activeTable) return [];

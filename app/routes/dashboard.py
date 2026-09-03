@@ -582,6 +582,7 @@ def course(course_id):
         hw_texts=hw_texts,
         active_tab=active_tab,
         labels=labels,
+        label_palette=LABEL_PALETTE,
     )
 
 
@@ -1175,6 +1176,36 @@ def create_label():
     db.session.add(label)
     db.session.commit()
     return {'ok': True, 'label': {'id': label.id, 'name': label.name, 'color': label.color}}
+
+
+@bp.route('/labels/<int:label_id>', methods=['PATCH'])
+def update_label(label_id):
+    label = Label.query.get_or_404(label_id)
+    data = request.get_json(force=True)
+
+    if 'name' in data:
+        name = data['name'].strip()
+        if not name:
+            return {'ok': False, 'error': 'Name cannot be empty'}, 400
+        if Label.query.filter(Label.name == name, Label.id != label_id).first():
+            return {'ok': False, 'error': 'A label with that name already exists'}, 400
+        label.name = name
+
+    if 'color' in data:
+        if data['color'] not in LABEL_PALETTE:
+            return {'ok': False, 'error': 'Invalid color'}, 400
+        label.color = data['color']
+
+    db.session.commit()
+    return {'ok': True, 'label': {'id': label.id, 'name': label.name, 'color': label.color}}
+
+
+@bp.route('/labels/<int:label_id>', methods=['DELETE'])
+def delete_label(label_id):
+    label = Label.query.get_or_404(label_id)
+    db.session.delete(label)
+    db.session.commit()
+    return {'ok': True}
 
 
 @bp.route('/course/<int:course_id>/labels/apply', methods=['POST'])
