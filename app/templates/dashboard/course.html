@@ -436,6 +436,86 @@
     border: 1px solid var(--border-strong);
   }
   .sel-clear:hover { background: var(--border); color: var(--text-primary); }
+  .sel-label {
+    background: var(--surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border-strong);
+  }
+  .sel-label:hover { background: var(--border); }
+  .sel-label svg { width: 13px; height: 13px; }
+
+  /* ── LABEL POPOVER ──────────────────────────────────────── */
+  #label-popover {
+    display: none;
+    position: fixed;
+    z-index: 9999;
+    width: 220px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    padding: 6px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.14);
+  }
+  .label-pop-list {
+    max-height: 220px;
+    overflow-y: auto;
+    margin-bottom: 6px;
+  }
+  .label-pop-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 8px;
+    border-radius: 4px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--text-primary);
+    text-align: left;
+  }
+  .label-pop-item:hover { background: var(--bg); }
+  .label-pop-dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .label-pop-empty {
+    padding: 7px 8px;
+    font-size: 12px;
+    color: var(--text-tertiary);
+  }
+  .label-pop-new {
+    display: flex;
+    gap: 6px;
+    border-top: 1px solid var(--border);
+    padding-top: 6px;
+  }
+  .label-pop-new input {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--sans);
+    font-size: 12px;
+    padding: 6px 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    color: var(--text-primary);
+  }
+  .label-pop-new button {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 6px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--icon-message);
+    background: var(--icon-message);
+    color: #fff;
+    cursor: pointer;
+  }
+  .label-pop-new button:hover { background: #2d5cbf; }
+  .label-pop-new button:disabled { opacity: 0.5; cursor: default; }
 
   /* ── DISCUSSION POPUP ───────────────────────────────────── */
   #disc-popup {
@@ -525,6 +605,10 @@
       <button type="button" class="sel-btn sel-send" id="sel-send-timeline">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 2.5h13l-6.5 5.5-6.5-5.5z"/><path d="M1.5 2.5v9h13v-9"/></svg>
         Send Message
+      </button>
+      <button type="button" class="sel-btn sel-label" id="sel-label-timeline">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 1.5H2.5a1 1 0 00-1 1v11a1 1 0 001 1h7l5-6.5-5-6.5z"/><circle cx="5" cy="5.5" r="1"/></svg>
+        Add Label
       </button>
       <button type="button" class="sel-btn sel-clear" id="sel-clear-timeline">Clear selection</button>
     </div>
@@ -633,6 +717,10 @@
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 2.5h13l-6.5 5.5-6.5-5.5z"/><path d="M1.5 2.5v9h13v-9"/></svg>
         Send Message
       </button>
+      <button type="button" class="sel-btn sel-label" id="sel-label-submissions">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 1.5H2.5a1 1 0 00-1 1v11a1 1 0 001 1h7l5-6.5-5-6.5z"/><circle cx="5" cy="5.5" r="1"/></svg>
+        Add Label
+      </button>
       <button type="button" class="sel-btn sel-clear" id="sel-clear-submissions">Clear selection</button>
     </div>
   </div>
@@ -710,6 +798,15 @@
 </div>{# .page #}
 
 <div id="disc-popup"></div>
+
+<div id="label-popover">
+  <div class="label-pop-list" id="label-pop-list"></div>
+  <form class="label-pop-new" id="label-pop-new-form">
+    <input type="text" id="label-pop-new-input" placeholder="New label…" maxlength="50" autocomplete="off">
+    <button type="submit" id="label-pop-new-btn">Add</button>
+  </form>
+  <div class="label-pop-error" id="label-pop-error" style="display:none; color:#c0392b; font-size:11px; margin-top:6px;"></div>
+</div>
 
 <script>
 (function () {
@@ -907,6 +1004,130 @@
         window.location.href = url;
       });
     }
+  });
+})();
+
+// ── Label popover ──────────────────────────────────────────────────────
+(function () {
+  var popover  = document.getElementById('label-popover');
+  var listEl   = document.getElementById('label-pop-list');
+  var newForm  = document.getElementById('label-pop-new-form');
+  var newInput = document.getElementById('label-pop-new-input');
+  var newBtn   = document.getElementById('label-pop-new-btn');
+  var errorEl  = document.getElementById('label-pop-error');
+  if (!popover) return;
+
+  var labels    = {{ labels | tojson }};  // [{id, name, color}, ...]
+  var applyUrl  = {{ url_for('dashboard.apply_label', course_id=course.id) | tojson }};
+  var createUrl = {{ url_for('dashboard.create_label') | tojson }};
+
+  var activeTable = null;  // table whose selection this popover instance applies to
+
+  function escHtml(str) {
+    var d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  function showError(msg) {
+    errorEl.textContent = msg;
+    errorEl.style.display = 'block';
+  }
+
+  function clearError() {
+    errorEl.style.display = 'none';
+  }
+
+  function renderList() {
+    if (!labels.length) {
+      listEl.innerHTML = '<div class="label-pop-empty">No labels yet</div>';
+      return;
+    }
+    listEl.innerHTML = '';
+    labels.forEach(function (l) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'label-pop-item';
+      btn.innerHTML = '<span class="label-pop-dot" style="background:' + l.color + '"></span>' + escHtml(l.name);
+      btn.addEventListener('click', function () { applyLabel(l.id); });
+      listEl.appendChild(btn);
+    });
+  }
+
+  function getCheckedIds() {
+    if (!activeTable) return [];
+    var ids = [];
+    activeTable.querySelectorAll('.row-cb:checked').forEach(function (cb) { ids.push(cb.value); });
+    return ids;
+  }
+
+  function close() {
+    popover.style.display = 'none';
+    activeTable = null;
+    clearError();
+  }
+
+  function applyLabel(labelId) {
+    var ids = getCheckedIds();
+    if (!ids.length) { close(); return; }
+    fetch(applyUrl, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({label_id: labelId, student_ids: ids})
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (d.ok) close();
+      else showError(d.error || 'Could not apply label');
+    });
+  }
+
+  newForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var name = newInput.value.trim();
+    if (!name) return;
+    clearError();
+    newBtn.disabled = true;
+    fetch(createUrl, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name: name})
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      newBtn.disabled = false;
+      if (!d.ok) { showError(d.error || 'Could not create label'); return; }
+      labels.push(d.label);
+      newInput.value = '';
+      renderList();
+      applyLabel(d.label.id);
+    });
+  });
+
+  function openFor(btn, table) {
+    activeTable = table;
+    clearError();
+    renderList();
+    popover.style.display = 'block';
+    var r = btn.getBoundingClientRect();
+    var left = Math.min(r.left, window.innerWidth - popover.offsetWidth - 10);
+    popover.style.top  = (r.bottom + 6) + 'px';
+    popover.style.left = left + 'px';
+    newInput.focus();
+  }
+
+  ['timeline', 'submissions'].forEach(function (suffix) {
+    var btn   = document.getElementById('sel-label-' + suffix);
+    var table = document.getElementById('table-' + suffix);
+    if (!btn || !table) return;
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (popover.style.display === 'block' && activeTable === table) { close(); return; }
+      openFor(btn, table);
+    });
+  });
+
+  document.addEventListener('click', function (e) {
+    if (popover.style.display === 'block' && !popover.contains(e.target)) close();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') close();
   });
 })();
 

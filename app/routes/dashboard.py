@@ -15,8 +15,10 @@ from app.models.canvas_cache import CanvasCache
 from app.models.check_back_date import CheckBackDate
 from app.models.course_display_name import CourseDisplayName
 from app.models.interaction_event import InteractionEvent
+from app.models.label import Label
 from app.models.message_template import MessageTemplate
 from app.models.pinned_discussion import PinnedDiscussion
+from app.models.student_label import StudentLabel
 from app.models.student_note import StudentNote
 from app.models.student_record import StudentRecord
 from app.services.by_module import build_by_module_view
@@ -566,6 +568,8 @@ def course(course_id):
     display_name_row = CourseDisplayName.query.filter_by(course_id=course_id).first()
     display_name = display_name_row.name if display_name_row else course_obj.get('name', '')
 
+    labels = Label.query.order_by(Label.name).all()
+
     return render_template('dashboard/course.html',
         course=course_obj,
         display_name=display_name,
@@ -577,6 +581,7 @@ def course(course_id):
         instr_disc_messages=instr_disc_messages,
         hw_texts=hw_texts,
         active_tab=active_tab,
+        labels=labels,
     )
 
 
@@ -1142,6 +1147,53 @@ def save_group_check_back(course_id):
             ))
     db.session.commit()
     return {'ok': True, 'date': parsed.isoformat(), 'note': note_str}
+
+
+# Auto-assigned to new labels, round-robin by creation order. Matches the
+# muted accent colors already used elsewhere in the UI (tier dots, icons).
+LABEL_PALETTE = [
+    '#e8705a',  # coral
+    '#d4a012',  # amber
+    '#5a9e6e',  # green
+    '#3b6fd4',  # blue
+    '#7c4dba',  # purple
+    '#1a8a6a',  # teal
+    '#c44b1e',  # burnt orange
+    '#6b6760',  # neutral gray
+]
+
+
+@bp.route('/labels', methods=['POST'])
+def create_label():
+    name = request.get_json(force=True).get('name', '').strip()
+    if not name:
+        return {'ok': False, 'error': 'Name is required'}, 400
+    if Label.query.filter_by(name=name).first():
+        return {'ok': False, 'error': 'A label with that name already exists'}, 400
+    color = LABEL_PALETTE[Label.query.count() % len(LABEL_PALETTE)]
+    label = Label(name=name, color=color)
+    db.session.add(label)
+    db.session.commit()
+    return {'ok': True, 'label': {'id': label.id, 'name': label.name, 'color': label.color}}
+
+
+@bp.route('/course/<int:course_id>/labels/apply', methods=['POST'])
+def apply_label(course_id):
+    data = request.get_json(force=True)
+    label_id = data.get('label_id')
+    student_ids = [int(s) for s in data.get('student_ids', []) if str(s).isdigit()]
+    if not label_id or not student_ids:
+        return {'ok': False, 'error': 'label_id and student_ids are required'}, 400
+    if not Label.query.get(label_id):
+        return {'ok': False, 'error': 'Label not found'}, 404
+
+    rows = [{'course_id': course_id, 'student_canvas_id': sid, 'label_id': label_id}
+            for sid in student_ids]
+    stmt = pg_insert(StudentLabel.__table__).values(rows)
+    stmt = stmt.on_conflict_do_nothing(constraint='uq_student_label')
+    db.session.execute(stmt)
+    db.session.commit()
+    return {'ok': True}
 
 
 @bp.route('/message-templates', methods=['POST'])
