@@ -70,6 +70,22 @@
   .staleness-dot.yellow { background: #d4a012; }
   .staleness-dot.red    { background: #e8705a; }
   .days-ago { font-family: var(--mono); font-size: 12px; color: var(--text-secondary); }
+
+  .preferred-name-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .preferred-name-label {
+    font-family: var(--mono); font-size: 10px; color: var(--text-tertiary);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .preferred-name-input {
+    font-family: var(--sans); font-size: 13px; color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 3px 8px; width: 160px; background: var(--surface);
+  }
+  .preferred-name-input:focus { outline: none; border-color: var(--accent); }
+  .preferred-name-status {
+    font-family: var(--mono); font-size: 10px; color: var(--text-tertiary);
+    min-height: 14px; transition: opacity 0.3s;
+  }
   .dropped-badge {
     font-family: var(--mono); font-size: 10px; font-weight: 500;
     color: #c0392b; background: #fef2f0; border: 1px solid #f0c4be;
@@ -695,6 +711,12 @@
         Add Label
       </button>
     </div>
+    <div class="preferred-name-row">
+      <span class="preferred-name-label">Goes by</span>
+      <input type="text" class="preferred-name-input" id="preferred-name-input"
+             value="{{ preferred_name }}" placeholder="e.g. a nickname">
+      <span class="preferred-name-status" id="preferred-name-status"></span>
+    </div>
     <div class="student-labels-row" id="student-labels-row"{% if not student_labels %} style="display:none;"{% endif %}>
       {% for lbl in student_labels %}
         <span class="student-label-tag" data-label-id="{{ lbl.id }}" style="background:{{ lbl.color }}">
@@ -1079,6 +1101,36 @@ const CELL_DRAWER_DATA = {{ by_module.drawer_payload | tojson }};
 
   // Set initial size on page load
   resize();
+})();
+</script>
+
+<script>
+(function () {
+  var input   = document.getElementById('preferred-name-input');
+  var status  = document.getElementById('preferred-name-status');
+  var saveUrl = {{ url_for('dashboard.save_note', course_id=course.id, student_id=student_id) | tojson }};
+  var saveTimer = null;
+
+  function save() {
+    fetch(saveUrl, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({preferred_name: input.value}),
+    }).then(function () {
+      status.textContent = 'Saved';
+      status.style.opacity = '1';
+      setTimeout(function () { status.style.opacity = '0'; }, 1500);
+    }).catch(function () {
+      status.textContent = 'Save failed';
+      status.style.opacity = '1';
+    });
+  }
+
+  input.addEventListener('input', function () {
+    clearTimeout(saveTimer);
+    status.textContent = '';
+    saveTimer = setTimeout(save, 800);
+  });
 })();
 </script>
 

@@ -829,6 +829,7 @@ def student(course_id, student_id):
         course_id=course_id, student_canvas_id=student_id
     ).first()
     note_content = note_row.content if note_row else ''
+    preferred_name = (note_row.preferred_name if note_row else None) or ''
 
     cb_row = CheckBackDate.query.filter_by(
         course_id=course_id, student_canvas_id=student_id
@@ -872,6 +873,7 @@ def student(course_id, student_id):
         active_days=active_days,
         day_drawer=day_drawer,
         note_content=note_content,
+        preferred_name=preferred_name,
         check_back_date=check_back_date,
         check_back_note=check_back_note,
         is_dropped=is_dropped,
@@ -884,22 +886,39 @@ def student(course_id, student_id):
 
 @bp.route('/course/<int:course_id>/student/<int:student_id>/note', methods=['POST'])
 def save_note(course_id, student_id):
-    content = request.get_json(force=True).get('content', '')
+    """Partial update — the notes textarea and the preferred-name field
+    autosave independently, each sending only its own key, so this must
+    not clobber whichever field wasn't included in a given request."""
+    data = request.get_json(force=True)
     note = StudentNote.query.filter_by(
         course_id=course_id, student_canvas_id=student_id
     ).first()
-    if note:
-        note.content = content
-        note.updated_at = datetime.now(timezone.utc)
-    else:
-        note = StudentNote(
-            course_id=course_id,
-            student_canvas_id=student_id,
-            content=content,
-        )
+    if not note:
+        note = StudentNote(course_id=course_id, student_canvas_id=student_id, content='')
         db.session.add(note)
+
+    if 'content' in data:
+        note.content = data['content']
+    if 'preferred_name' in data:
+        note.preferred_name = data['preferred_name'].strip() or None
+
+    note.updated_at = datetime.now(timezone.utc)
     db.session.commit()
     return {'ok': True}
+
+
+@bp.route('/api/course/<int:course_id>/student/<int:student_id>')
+def api_student_note(course_id, student_id):
+    """Read-only JSON for other apps (e.g. CanvasGrader) to pull this
+    student's contact note and preferred name into their own UI, instead
+    of the instructor having to switch over to this app to see them."""
+    note = StudentNote.query.filter_by(
+        course_id=course_id, student_canvas_id=student_id
+    ).first()
+    return {
+        'note': note.content if note else '',
+        'preferred_name': (note.preferred_name if note else None) or '',
+    }
 
 
 @bp.route('/course/<int:course_id>/student/<int:student_id>/check-back', methods=['POST'])

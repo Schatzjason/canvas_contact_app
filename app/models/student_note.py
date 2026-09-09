@@ -10,6 +10,7 @@ class StudentNote(db.Model):
     course_id         = db.Column(db.BigInteger, nullable=False)
     student_canvas_id = db.Column(db.BigInteger, nullable=False)
     content           = db.Column(db.Text, nullable=False, default='')
+    preferred_name    = db.Column(db.String(255), nullable=True)
     updated_at        = db.Column(db.DateTime(timezone=True), nullable=False,
                                   default=lambda: datetime.now(timezone.utc))
 
