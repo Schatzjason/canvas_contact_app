@@ -29,11 +29,25 @@ from app.services.sync import run_sync, sync_course
 bp = Blueprint('dashboard', __name__)
 
 
+def _greeting_name(course_id, student_id, full_name):
+    """The name to greet a student by — their preferred_name if they've
+    set one (the "Goes by" field on the student page), otherwise their
+    first name. Feeds the <name> token and the default message greeting."""
+    note = StudentNote.query.filter_by(
+        course_id=course_id, student_canvas_id=student_id,
+    ).first()
+    preferred = (note.preferred_name if note else None) or ''
+    if preferred:
+        return preferred
+    return full_name.split()[0] if full_name else ''
+
+
 def fill_placeholders(text, student_context):
     """Replace placeholder tokens in *text* with values from *student_context*.
 
     Supported placeholders:
-        <name>  — student's first name
+        <name>  — student's preferred name if they've set one, else first name
+                   (see _greeting_name — callers pass that as first_name here)
         <time>  — days since last interaction (e.g. "5 days"), or empty string
 
     *student_context* is a dict with optional keys:
@@ -1024,7 +1038,7 @@ def compose(course_id, student_id):
         rec = StudentRecord.query.filter_by(course_id=course_id, student_canvas_id=student_id).first()
         student_name = rec.name if rec else f'Student {student_id}'
 
-    first_name = student_name.split()[0] if student_name else ''
+    first_name = _greeting_name(course_id, student_id, student_name)
     last_at = db.session.query(
         func.max(InteractionEvent.occurred_at)
     ).filter(
@@ -1169,7 +1183,7 @@ def group_compose(course_id):
         events = []
 
         for recip in recipients:
-            first_name = recip['name'].split()[0] if recip['name'] else ''
+            first_name = _greeting_name(course_id, recip['id'], recip['name'])
             last_at = db.session.query(
                 func.max(InteractionEvent.occurred_at)
             ).filter(

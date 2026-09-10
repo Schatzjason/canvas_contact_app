@@ -633,6 +633,46 @@ def test_compose_get_200(client):
     assert b'Alice Smith' in response.data
 
 
+def test_compose_get_default_body_uses_preferred_name(client):
+    """The default greeting ("Hi X, ") should use preferred_name when set."""
+    db.session.add(StudentNote(
+        course_id=COURSE_ID, student_canvas_id=STUDENT_A,
+        content='', preferred_name='Russ',
+    ))
+    db.session.commit()
+    with patch('app.routes.dashboard.CanvasClient',
+               return_value=_mock_client_with_name('Rucel Macaalay')):
+        response = client.get(f'/course/{COURSE_ID}/student/{STUDENT_A}/compose')
+    assert b'Hi Russ' in response.data
+
+
+def test_compose_post_uses_preferred_name_for_name_token(client):
+    """<name> in the message body/subject resolves to preferred_name, not
+    the student's first name, when one is set."""
+    db.session.add(StudentNote(
+        course_id=COURSE_ID, student_canvas_id=STUDENT_A,
+        content='', preferred_name='Russ',
+    ))
+    db.session.commit()
+
+    from app.services.canvas_client import CanvasClient as _RealClient
+    with patch('app.routes.dashboard.CanvasClient') as MockClass:
+        MockClass.return_value = _mock_client_with_name('Rucel Macaalay')
+        MockClass.return_value.send_message.return_value = [{'id': 9999}]
+        MockClass.return_value.get_conversation.return_value = {
+            'id': 9999, 'messages': [{'id': 8888, 'created_at': '2026-03-06T12:00:00+00:00'}],
+        }
+        MockClass._make_cache_key.side_effect = _RealClient._make_cache_key
+        client.post(
+            f'/course/{COURSE_ID}/student/{STUDENT_A}/compose',
+            data={'subject': 'Hi <name>', 'body': 'Hello <name>, how are you?'},
+        )
+
+    call_args = MockClass.return_value.send_message.call_args[0]
+    assert call_args[1] == 'Hi Russ'
+    assert call_args[2] == 'Hello Russ, how are you?'
+
+
 def _compose_post(client, conv_response=None, message_id=8888,
                   message_created_at='2026-03-06T12:00:00+00:00'):
     """Helper: POST to compose with a mocked send_message return value.
@@ -929,6 +969,32 @@ def test_fill_placeholders_no_context():
     assert result == 'Hi <name>, <time> ago.'
 
 
+# ---------------------------------------------------------------------------
+# _greeting_name
+# ---------------------------------------------------------------------------
+
+def test_greeting_name_uses_preferred_name_when_set(client):
+    from app.routes.dashboard import _greeting_name
+    db.session.add(StudentNote(
+        course_id=COURSE_ID, student_canvas_id=STUDENT_A,
+        content='', preferred_name='Russ',
+    ))
+    db.session.commit()
+    assert _greeting_name(COURSE_ID, STUDENT_A, 'Rucel Macaalay') == 'Russ'
+
+
+def test_greeting_name_falls_back_to_first_name_when_unset(client):
+    from app.routes.dashboard import _greeting_name
+    assert _greeting_name(COURSE_ID, STUDENT_A, 'Alice Smith') == 'Alice'
+
+
+def test_greeting_name_falls_back_when_note_has_no_preferred_name(client):
+    from app.routes.dashboard import _greeting_name
+    db.session.add(StudentNote(course_id=COURSE_ID, student_canvas_id=STUDENT_A, content='Some note'))
+    db.session.commit()
+    assert _greeting_name(COURSE_ID, STUDENT_A, 'Alice Smith') == 'Alice'
+
+
 def test_compose_post_fills_placeholders(client):
     """POST /compose replaces <name> and <time> placeholders before sending."""
     _seed_event(days_ago=5)
@@ -1131,6 +1197,38 @@ def test_group_compose_post_fills_placeholders_per_student(client):
     # Bob — no events seeded, so <time> should remain as-is
     assert 'Bob' in call_args[1][0][1]
     assert 'Bob' in call_args[1][0][2]
+
+
+def test_group_compose_post_uses_preferred_name_per_student(client):
+    """A student with preferred_name set gets that in <name>; one without
+    falls back to first name — per-recipient, not all-or-nothing."""
+    db.session.add(StudentNote(
+        course_id=COURSE_ID, student_canvas_id=STUDENT_A,
+        content='', preferred_name='Ali',
+    ))
+    db.session.commit()
+
+    from app.services.canvas_client import CanvasClient as _RealClient
+    with patch('app.routes.dashboard.CanvasClient') as MockClass:
+        mock = _mock_group_client()
+        mock.send_message.side_effect = [
+            [{'id': 5001, 'last_authored_at': '2026-03-06T12:00:00+00:00'}],
+            [{'id': 5002, 'last_authored_at': '2026-03-06T12:00:00+00:00'}],
+        ]
+        MockClass.return_value = mock
+        MockClass._make_cache_key.side_effect = _RealClient._make_cache_key
+        client.post(
+            f'/course/{COURSE_ID}/group-compose',
+            data={
+                'students': f'{STUDENT_A},{STUDENT_B}',
+                'subject': 'Hi <name>',
+                'body': 'Hello <name>.',
+            },
+        )
+    call_args = mock.send_message.call_args_list
+    assert 'Ali' in call_args[0][0][2]     # STUDENT_A (Alice Smith) -> preferred "Ali"
+    assert 'Alice' not in call_args[0][0][2]
+    assert 'Bob' in call_args[1][0][2]     # STUDENT_B -> no preferred name, falls back
 
 
 def test_group_compose_post_invalidates_inbox_cache(client):
