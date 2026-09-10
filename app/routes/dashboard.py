@@ -104,6 +104,55 @@ def _time_badge(last_at, now, warn_days):
     return text, cls
 
 
+def build_search_students():
+    """All students across the instructor's active courses, for the nav
+    search bar — same data on every page, never scoped down to whichever
+    course happens to be open. Enrollments are cached 24h; courses are
+    always fetched live (cheap — one instructor's course list is small)."""
+    try:
+        client = CanvasClient()
+        courses = client.get_courses()
+    except Exception:
+        return []
+
+    search_students = []
+    for c in courses:
+        section = c.get('course_code', '')
+        # Extract trailing section number (e.g. "CS111B-932" → "932")
+        if '-' in section:
+            section = section.rsplit('-', 1)[-1]
+        try:
+            enrs = client.get_enrollments(c['id'])
+        except Exception:
+            enrs = []
+        enrolled_ids = set()
+        for e in enrs:
+            u = e.get('user', {})
+            search_students.append({
+                'name': u.get('sortable_name') or u.get('name', f'Student {e["user_id"]}'),
+                'section': section,
+                'course_id': c['id'],
+                'student_id': e['user_id'],
+                'dropped': False,
+            })
+            enrolled_ids.add(e['user_id'])
+
+        # Include dropped students in search results
+        dropped = StudentRecord.query.filter_by(
+            course_id=c['id'], status='dropped',
+        ).all()
+        for rec in dropped:
+            if rec.student_canvas_id not in enrolled_ids:
+                search_students.append({
+                    'name': rec.sortable_name,
+                    'section': section,
+                    'course_id': rec.course_id,
+                    'student_id': rec.student_canvas_id,
+                    'dropped': True,
+                })
+    return search_students
+
+
 @bp.route('/')
 def index():
     client = CanvasClient()
@@ -197,49 +246,11 @@ def index():
                 'student_id': cb.student_canvas_id,
             })
 
-    # Build student search index across all courses (enrollments are cached 24h)
-    search_students = []
-    for c in courses:
-        section = c.get('course_code', '')
-        # Extract trailing section number (e.g. "CS111B-932" → "932")
-        if '-' in section:
-            section = section.rsplit('-', 1)[-1]
-        try:
-            enrs = client.get_enrollments(c['id'])
-        except Exception:
-            enrs = []
-        enrolled_ids = set()
-        for e in enrs:
-            u = e.get('user', {})
-            search_students.append({
-                'name': u.get('sortable_name') or u.get('name', f'Student {e["user_id"]}'),
-                'section': section,
-                'course_id': c['id'],
-                'student_id': e['user_id'],
-                'dropped': False,
-            })
-            enrolled_ids.add(e['user_id'])
-
-        # Include dropped students in search results
-        dropped = StudentRecord.query.filter_by(
-            course_id=c['id'], status='dropped',
-        ).all()
-        for rec in dropped:
-            if rec.student_canvas_id not in enrolled_ids:
-                search_students.append({
-                    'name': rec.sortable_name,
-                    'section': section,
-                    'course_id': rec.course_id,
-                    'student_id': rec.student_canvas_id,
-                    'dropped': True,
-                })
-
     return render_template('dashboard/index.html',
         courses=courses,
         stats_by_course=stats_by_course,
         display_names=display_names,
         check_back_rows=check_back_rows,
-        search_students=search_students,
     )
 
 

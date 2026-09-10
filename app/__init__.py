@@ -26,6 +26,13 @@ def create_app():
     from app.routes import dashboard
     app.register_blueprint(dashboard.bp)
 
+    # Nav search bar is on every page, not just the course list — supply
+    # its data (all students across active courses) to every template
+    # render instead of each route computing it separately.
+    @app.context_processor
+    def inject_search_students():
+        return {'search_students': dashboard.build_search_students()}
+
     from app.cli import register_commands
     register_commands(app)
 

@@ -10,7 +10,10 @@
     <span class="nav-sep">/</span>
     <span class="nav-student">{{ student_name }}</span>
   </div>
-  <span class="nav-meta">Spring 2025</span>
+  <div class="nav-right">
+    {% include "_nav_search.html" %}
+    <span class="nav-meta">Spring 2025</span>
+  </div>
 </nav>
 {% endblock %}
 
