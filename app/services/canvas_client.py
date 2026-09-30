@@ -93,10 +93,12 @@ class CanvasClient:
 
         return data
 
-    def _get_all_pages(self, path, params=None, ttl=None):
-        """Paginated GET — follows Link: rel="next" headers. Combined result optionally cached."""
-        if ttl is not None:
-            cache_key = self._make_cache_key(path, params)
+    def _get_all_pages(self, path, params=None, ttl=None, refresh=False):
+        """Paginated GET — follows Link: rel="next" headers. Combined result optionally cached.
+
+        refresh=True skips reading the cache (the fresh result is still written)."""
+        cache_key = self._make_cache_key(path, params) if ttl is not None else None
+        if ttl is not None and not refresh:
             cached = self._cache_read(cache_key)
             if cached is not None:
                 return cached
@@ -324,16 +326,39 @@ class CanvasClient:
             ttl=TTL_SUBMISSIONS,
         )
 
-    def get_discussion_topics(self, course_id):
+    def get_discussion_topics(self, course_id, refresh=False):
         """All discussion topics for a course (cached 15 min)."""
         return self._get_all_pages(
             f'/api/v1/courses/{course_id}/discussion_topics',
             ttl=TTL_DISCUSSION_ENTRIES,
+            refresh=refresh,
         )
 
-    def get_discussion_entries(self, course_id, topic_id):
+    def get_discussion_entries(self, course_id, topic_id, refresh=False):
         """All entries for a discussion topic, including recent_replies (cached 15 min)."""
         return self._get_all_pages(
             f'/api/v1/courses/{course_id}/discussion_topics/{topic_id}/entries',
             ttl=TTL_DISCUSSION_ENTRIES,
+            refresh=refresh,
+        )
+
+    def get_student_submissions(self, course_id, student_id):
+        """Every submission one student has made in a course, fetched live.
+
+        The result is cached (like get_submissions) so the student page can map
+        each submission event back to its assignment without another call."""
+        return self._get_all_pages(
+            f'/api/v1/courses/{course_id}/students/submissions',
+            params={'student_ids[]': student_id},
+            ttl=TTL_SUBMISSIONS,
+            refresh=True,
+        )
+
+    def get_student_conversations(self, student_id, scope):
+        """Conversation summaries involving one student (scope 'sent' or 'inbox'),
+        fetched live. Uses Canvas's user filter, so it's one small listing rather
+        than a scan of the whole mailbox."""
+        return self._get_all_pages(
+            '/api/v1/conversations',
+            params={'scope': scope, 'filter[]': f'user_{student_id}'},
         )

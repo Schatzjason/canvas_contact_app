@@ -153,6 +153,9 @@
   }
   .compose-btn svg { width: 12px; height: 12px; flex-shrink: 0; }
   .compose-btn:hover { border-color: var(--icon-message); color: var(--icon-message); }
+  .compose-btn:disabled { opacity: 0.6; cursor: default; }
+  .compose-btn.spinning svg { animation: refresh-spin 0.9s linear infinite; }
+  @keyframes refresh-spin { to { transform: rotate(360deg); } }
 
   /* ── PINNED POST ─────────────────────────────────────────── */
   .section { margin-top: 32px; max-width: 680px; }
@@ -714,6 +717,13 @@
       <button type="button" class="compose-btn" id="add-label-btn">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 1.5H2.5a1 1 0 00-1 1v11a1 1 0 001 1h7l5-6.5-5-6.5z"/><circle cx="5" cy="5.5" r="1"/></svg>
         Add Label
+      </button>
+      <button type="button" class="compose-btn" id="refresh-btn"
+              data-url="{{ url_for('dashboard.refresh_student', course_id=course.id, student_id=student_id) }}"
+              data-stale="{{ 'true' if needs_refresh else 'false' }}"
+              title="{% if last_refreshed %}Last refreshed {{ last_refreshed.astimezone().strftime('%-m/%-d %-I:%M %p') }}{% else %}Never refreshed{% endif %}">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 8a5.5 5.5 0 11-1.6-3.9"/><path d="M13.5 2v3h-3"/></svg>
+        <span id="refresh-label">Refresh</span>
       </button>
     </div>
     <div class="preferred-name-row">
@@ -1544,6 +1554,40 @@ const CELL_DRAWER_DATA = {{ by_module.drawer_payload | tojson }};
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') close();
   });
+})();
+</script>
+
+<script>
+(function () {
+  var btn   = document.getElementById('refresh-btn');
+  var label = document.getElementById('refresh-label');
+  var running = false;
+
+  function refresh() {
+    if (running) return;
+    running = true;
+    btn.disabled = true;
+    btn.classList.add('spinning');
+    label.textContent = 'Refreshing\u2026';
+    fetch(btn.dataset.url, { method: 'POST' })
+      .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
+      .then(function (data) {
+        if (data.ok) { window.location.reload(); return; }
+        throw new Error(data.error || 'failed');
+      })
+      .catch(function (err) {
+        running = false;
+        btn.disabled = false;
+        btn.classList.remove('spinning');
+        label.textContent = 'Refresh failed \u2013 retry';
+        btn.title = String(err.message || err);
+      });
+  }
+
+  btn.addEventListener('click', refresh);
+  // Reloading after a successful refresh is safe: the refresh time is now
+  // recent, so the page renders data-stale="false". A failure doesn't reload.
+  if (btn.dataset.stale === 'true') refresh();
 })();
 </script>
 {% endblock %}

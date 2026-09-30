@@ -208,14 +208,17 @@ def _topic_due_at(topic):
     return None
 
 
-def _phase_discussions(client, course_id, student_ids, cutoff, instructor_id, progress_q):
+def _phase_discussions(client, course_id, student_ids, cutoff, instructor_id, progress_q,
+                       refresh=False):
     phase = 'discussions'
     progress_q.put({'status': 'start', 'phase': phase})
     t0 = time.perf_counter()
     events = []
     matched = 0
     try:
-        all_topics = client.get_discussion_topics(course_id)
+        # `refresh` bypasses the cache; kwargs only when set so plain syncs call as before.
+        kw = {'refresh': True} if refresh else {}
+        all_topics = client.get_discussion_topics(course_id, **kw)
 
         # Only fetch entries for topics that are relevant: due date is
         # between the cutoff and a week from now.  Topics with no due date
@@ -230,7 +233,7 @@ def _phase_discussions(client, course_id, student_ids, cutoff, instructor_id, pr
         for i, topic in enumerate(topics, 1):
             progress_q.put({'status': 'page', 'phase': phase, 'n': i,
                             'total': len(topics), 'topic': topic.get('title', '')})
-            entries = client.get_discussion_entries(course_id, topic['id'])
+            entries = client.get_discussion_entries(course_id, topic['id'], **kw)
             for entry in entries:
                 entry_at = datetime.fromisoformat(entry['created_at'])
                 if entry_at >= cutoff and entry.get('user_id') in student_ids:
@@ -331,6 +334,19 @@ def _phase_submissions(client, course_id, student_ids, cutoff, progress_q):
     return events
 
 
+def _course_cutoff(course_obj, today):
+    """Earliest timestamp worth syncing: the course start, else 365 days back."""
+    fallback = datetime(today.year, today.month, today.day,
+                        tzinfo=timezone.utc) - timedelta(days=365)
+    start_str = course_obj.get('start_at') if course_obj else None
+    if not start_str:
+        return fallback
+    try:
+        return datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+    except (ValueError, TypeError):
+        return fallback
+
+
 # ---------------------------------------------------------------------------
 # Main sync generator
 # ---------------------------------------------------------------------------
@@ -356,24 +372,14 @@ def sync_course(course_id):
     # appears regardless of how old the assignment is.
     try:
         course_obj = client.get_course(course_id)
-        start_str = course_obj.get('start_at')
     except Exception:
         course_obj = None
-        start_str = None
+    cutoff = _course_cutoff(course_obj, today)
     # When a course concludes, Canvas drops every enrollment (including
     # students') out of the 'active' state we filter on below. Without this
     # guard that would look like every student withdrew on the same day —
     # flipping them all to 'dropped' and wiping their check-back dates.
     concluded = bool(course_obj) and course_obj.get('workflow_state') in ('completed', 'deleted')
-    if start_str:
-        try:
-            cutoff = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
-        except (ValueError, TypeError):
-            cutoff = datetime(today.year, today.month, today.day,
-                              tzinfo=timezone.utc) - timedelta(days=365)
-    else:
-        cutoff = datetime(today.year, today.month, today.day,
-                          tzinfo=timezone.utc) - timedelta(days=365)
     t_start = time.perf_counter()
 
     # ── Phase: enrollments (serial — must complete before parallel phases) ──
@@ -520,3 +526,122 @@ def run_sync(course_id):
         if msg.get('status') == 'done':
             return msg.get('count', 0)
     return 0
+
+
+# ---------------------------------------------------------------------------
+# Single-student refresh
+# ---------------------------------------------------------------------------
+
+STUDENT_REFRESH_MAX_AGE = timedelta(hours=1)
+
+
+def _student_scope(student_id):
+    return f'student_{student_id}'
+
+
+def last_student_refresh(course_id, student_id):
+    """When this student's data was last pulled from Canvas, or None.
+
+    A whole-course sync covers every student, so its marker counts too."""
+    stamps = [t for t in (
+        _get_sync_marker(course_id, _student_scope(student_id)),
+        _get_sync_marker(course_id, 'conv_inbox'),
+    ) if t]
+    return max(stamps) if stamps else None
+
+
+def student_needs_refresh(course_id, student_id):
+    last = last_student_refresh(course_id, student_id)
+    return last is None or datetime.now(timezone.utc) - last > STUDENT_REFRESH_MAX_AGE
+
+
+def _student_conversation_events(client, course_id, student_id, instructor_id):
+    """Messages in every thread shared with the student: the instructor's become
+    'conversation' events and the student's own 'student_message' events."""
+    threads = {}
+    for scope in ('sent', 'inbox'):
+        for conv in client.get_student_conversations(student_id, scope):
+            threads[conv['id']] = conv
+    events = []
+    for conv_id, conv in threads.items():
+        detail = client.get_conversation(conv_id, newer_than=_latest_activity(conv))
+        for msg in detail.get('messages', []):
+            if not msg.get('created_at'):
+                continue
+            author = msg.get('author_id')
+            if author == instructor_id:
+                event_type = 'conversation'
+            elif author == student_id:
+                event_type = 'student_message'
+            else:
+                continue
+            events.append({
+                'course_id': course_id,
+                'student_canvas_id': student_id,
+                'event_type': event_type,
+                'occurred_at': datetime.fromisoformat(msg['created_at']),
+                'source_id': msg['id'],
+            })
+    return events
+
+
+def _student_submission_events(client, course_id, student_id, cutoff):
+    skip_types = {'discussion_topic', 'online_quiz'}
+    events = []
+    for sub in client.get_student_submissions(course_id, student_id):
+        # Same rule as _phase_submissions: only work the student actually turned in.
+        if not sub.get('attempt') or not sub.get('submitted_at'):
+            continue
+        if sub.get('submission_type') in skip_types:
+            continue
+        submitted = datetime.fromisoformat(sub['submitted_at'])
+        if submitted < cutoff:
+            continue
+        events.append({
+            'course_id': course_id,
+            'student_canvas_id': student_id,
+            'event_type': 'submission',
+            'occurred_at': submitted,
+            'source_id': sub['id'],
+        })
+    return events
+
+
+def sync_student(course_id, student_id):
+    """Pull one student's messages, discussion posts and submissions from Canvas
+    and upsert them into interaction_event. Returns the number of events found.
+
+    Deliberately leaves the course-wide sync markers alone: those mean "every
+    student is up to date through here", which a single-student pull can't
+    promise. Raises on any Canvas failure, without recording a refresh time,
+    so a failed refresh is retried rather than trusted."""
+    client = CanvasClient()
+    today = datetime.now(timezone.utc).date()
+    try:
+        course_obj = client.get_course(course_id)
+    except Exception:
+        course_obj = None
+    cutoff = _course_cutoff(course_obj, today)
+    instructor_id = client.get_current_user()['id']
+
+    events = _student_conversation_events(client, course_id, student_id, instructor_id)
+    events += _student_submission_events(client, course_id, student_id, cutoff)
+
+    errors = queue.Queue()
+    events += _phase_discussions(client, course_id, {student_id}, cutoff,
+                                 instructor_id, errors, refresh=True)
+    while not errors.empty():
+        msg = errors.get_nowait()
+        if msg.get('status') == 'error':
+            raise RuntimeError(msg.get('msg', 'discussion refresh failed'))
+
+    if events:
+        stmt = pg_insert(InteractionEvent.__table__).values(events)
+        stmt = stmt.on_conflict_do_update(
+            constraint='uq_interaction_event_type_source_student',
+            set_={'occurred_at': stmt.excluded.occurred_at},
+        )
+        db.session.execute(stmt)
+        db.session.commit()
+    _set_sync_marker(course_id, _student_scope(student_id))
+    return len(events)

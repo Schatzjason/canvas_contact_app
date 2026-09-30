@@ -24,7 +24,9 @@ from app.models.student_record import StudentRecord
 from app.services.by_module import build_by_module_view, classify_submissions
 from app.services.canvas_client import CanvasClient, TTL_CONVERSATIONS
 from app.services.course_modules import recompute_course_modules
-from app.services.sync import run_sync, sync_course
+from app.services.sync import (
+    last_student_refresh, run_sync, student_needs_refresh, sync_course, sync_student,
+)
 
 bp = Blueprint('dashboard', __name__)
 
@@ -922,7 +924,22 @@ def student(course_id, student_id):
         student_labels=student_labels,
         all_labels=all_labels,
         label_palette=LABEL_PALETTE,
+        # A dropped student's data no longer changes, so don't auto-refresh it.
+        needs_refresh=not is_dropped and student_needs_refresh(course_id, student_id),
+        last_refreshed=last_student_refresh(course_id, student_id),
     )
+
+
+@bp.route('/course/<int:course_id>/student/<int:student_id>/refresh', methods=['POST'])
+def refresh_student(course_id, student_id):
+    """Pull this one student's latest Canvas activity into the timeline."""
+    try:
+        count = sync_student(course_id, student_id)
+    except Exception as exc:
+        current_app.logger.error('Student refresh failed for %s/%s: %s',
+                                 course_id, student_id, exc)
+        return {'ok': False, 'error': str(exc)}, 502
+    return {'ok': True, 'count': count}
 
 
 @bp.route('/course/<int:course_id>/student/<int:student_id>/note', methods=['POST'])

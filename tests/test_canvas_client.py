@@ -368,3 +368,23 @@ def test_get_conversation_refetches_when_cached_detail_is_stale():
         # Now the cache is current, so a repeat call is served from it.
         assert client.get_conversation(1, newer_than=summary_ts) == new
     assert mock_get.call_count == 2
+
+
+def test_get_student_submissions_always_hits_canvas_and_uses_student_filter():
+    pages = [_mock_response([{'id': 1}]), _mock_response([{'id': 1}, {'id': 2}])]
+    with patch('requests.get', side_effect=pages) as mock_get:
+        client = CanvasClient()
+        client.get_student_submissions(99, 101)
+        result = client.get_student_submissions(99, 101)
+
+    assert mock_get.call_count == 2          # no cache read: a refresh must be live
+    assert result == [{'id': 1}, {'id': 2}]
+    assert mock_get.call_args[0][0].endswith('/api/v1/courses/99/students/submissions')
+    assert mock_get.call_args[1]['params']['student_ids[]'] == 101
+
+
+def test_get_student_conversations_filters_by_user():
+    with patch('requests.get', return_value=_mock_response([])) as mock_get:
+        CanvasClient().get_student_conversations(101, 'inbox')
+    params = mock_get.call_args[1]['params']
+    assert params['filter[]'] == 'user_101' and params['scope'] == 'inbox'
