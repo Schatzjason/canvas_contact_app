@@ -353,3 +353,18 @@ def test_get_conversation_is_cached():
         client.get_conversation(3890130)
 
     mock_get.assert_called_once()
+
+
+def test_get_conversation_refetches_when_cached_detail_is_stale():
+    """A reply that lands after the detail was cached must not be hidden by the TTL."""
+    old = {'id': 1, 'messages': [{'id': 10, 'created_at': '2026-09-29T16:20:00Z'}]}
+    new = {'id': 1, 'messages': [{'id': 10, 'created_at': '2026-09-29T16:20:00Z'},
+                                 {'id': 11, 'created_at': '2026-09-29T17:05:00Z'}]}
+    with patch('requests.get', side_effect=[_mock_response(old), _mock_response(new)]) as mock_get:
+        client = CanvasClient()
+        client.get_conversation(1)
+        summary_ts = datetime.fromisoformat('2026-09-29T17:05:00+00:00')
+        assert client.get_conversation(1, newer_than=summary_ts) == new
+        # Now the cache is current, so a repeat call is served from it.
+        assert client.get_conversation(1, newer_than=summary_ts) == new
+    assert mock_get.call_count == 2

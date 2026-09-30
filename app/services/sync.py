@@ -57,6 +57,12 @@ def _enrollment_cache_key(course_id):
 # Phase functions — each puts progress messages on a Queue and returns events
 # ---------------------------------------------------------------------------
 
+def _latest_activity(conv):
+    """Newest message timestamp a conversation summary reports, as a datetime."""
+    stamps = [conv[k] for k in ('last_message_at', 'last_authored_message_at') if conv.get(k)]
+    return max(datetime.fromisoformat(t) for t in stamps) if stamps else None
+
+
 def _phase_conversations(client, course_id, student_ids, cutoff, instructor_id, progress_q):
     phase = 'conversations'
     progress_q.put({'status': 'start', 'phase': phase})
@@ -97,7 +103,7 @@ def _phase_conversations(client, course_id, student_ids, cutoff, instructor_id, 
                 continue
 
             try:
-                detail = client.get_conversation(conv['id'])
+                detail = client.get_conversation(conv['id'], newer_than=_latest_activity(conv))
             except Exception:
                 continue
 
@@ -161,7 +167,7 @@ def _phase_student_messages(client, course_id, student_ids, cutoff, progress_q):
                 continue
 
             try:
-                detail = client.get_conversation(conv['id'])
+                detail = client.get_conversation(conv['id'], newer_than=_latest_activity(conv))
             except Exception:
                 continue
 

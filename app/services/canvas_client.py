@@ -163,11 +163,27 @@ class CanvasClient:
             ttl=TTL_CONVERSATIONS,
         )
 
-    def get_conversation(self, conversation_id):
+    def get_conversation(self, conversation_id, newer_than=None):
         """Full detail for one conversation, including individual messages
         (each with its own id/created_at/author_id) — the list endpoint above
-        only returns thread-level summaries, not per-message data."""
-        return self._get(f'/api/v1/conversations/{conversation_id}', ttl=TTL_CONVERSATIONS)
+        only returns thread-level summaries, not per-message data.
+
+        newer_than: the thread's latest-activity timestamp from the list
+        summary. A cached detail whose newest message is older than that is
+        stale (a reply landed after it was cached), so it's refetched instead
+        of served for the rest of its TTL."""
+        path = f'/api/v1/conversations/{conversation_id}'
+        if newer_than is None:
+            return self._get(path, ttl=TTL_CONVERSATIONS)
+        cached = self._cache_read(self._make_cache_key(path, None))
+        if cached is not None:
+            stamps = [datetime.fromisoformat(m['created_at'])
+                      for m in cached.get('messages', []) if m.get('created_at')]
+            if stamps and max(stamps) >= newer_than:
+                return cached
+        data = self._get(path)
+        self._cache_write(self._make_cache_key(path, None), data, TTL_CONVERSATIONS)
+        return data
 
     # When stream_conversations is called with a since date (sync context),
     # only trust the cache if it was fetched very recently.  The normal 2-hour

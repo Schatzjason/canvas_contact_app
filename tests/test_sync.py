@@ -95,7 +95,7 @@ def _make_client(enrollments=None, conversations=None, inbox=None,
     for conv in inbox_convs:
         details.setdefault(conv['id'], _default_detail(conv, is_inbox=True))
 
-    mock.get_conversation.side_effect = lambda conv_id: details.get(conv_id, {'id': conv_id, 'messages': []})
+    mock.get_conversation.side_effect = lambda conv_id, **_: details.get(conv_id, {'id': conv_id, 'messages': []})
 
     mock.get_discussion_topics.return_value = topics or []
 
