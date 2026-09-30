@@ -21,7 +21,7 @@ from app.models.pinned_discussion import PinnedDiscussion
 from app.models.student_label import StudentLabel
 from app.models.student_note import StudentNote
 from app.models.student_record import StudentRecord
-from app.services.by_module import build_by_module_view
+from app.services.by_module import build_by_module_view, classify_submissions
 from app.services.canvas_client import CanvasClient, TTL_CONVERSATIONS
 from app.services.course_modules import recompute_course_modules
 from app.services.sync import run_sync, sync_course
@@ -782,6 +782,15 @@ def student(course_id, student_id):
                 parts.append(body)
             conv_text_by_src[r.sid] = '\n\n'.join(parts)
 
+    sub_info = classify_submissions(course_id, [
+        s for (d, et), ss in event_source_ids.items() if et == 'submission' for s in ss])
+    day_submission_kinds = {}  # {day: {'homework', 'reading'}}
+    for (d, et), ss in event_source_ids.items():
+        if et == 'submission':
+            for s in ss:
+                kind = sub_info.get(s, {}).get('kind', 'homework')
+                day_submission_kinds.setdefault(d, set()).add(kind)
+
     # ── Build per-day drawer payload ──────────────────────────
     day_drawer = {}
     for day, types in active_days.items():
@@ -809,6 +818,12 @@ def student(course_id, student_id):
         for s in event_source_ids.get((day, 'student_message'), []):
             sections.append({'label': 'Student Message',
                              'text': conv_text_by_src.get(s, '')})
+
+        for s in event_source_ids.get((day, 'submission'), []):
+            info = sub_info.get(s, {})
+            label = 'Reading Submission' if info.get('kind') == 'reading' else 'Homework Submission'
+            detail = ' — '.join(p for p in (info.get('name'), 'Late' if info.get('late') else '') if p)
+            sections.append({'label': label, 'text': detail})
 
         day_drawer[day.isoformat()] = {
             'date_label': day.strftime('%A') + ', ' + day.strftime('%B') + ' ' + str(day.day),
@@ -897,6 +912,7 @@ def student(course_id, student_id):
         today=today,
         active_days=active_days,
         day_drawer=day_drawer,
+        day_submission_kinds=day_submission_kinds,
         note_content=note_content,
         preferred_name=preferred_name,
         check_back_date=check_back_date,

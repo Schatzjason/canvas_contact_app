@@ -428,6 +428,8 @@
   .icon-grp          { background: #e8f5f0; color: var(--icon-group);      border: 2px solid var(--icon-group); }
   .icon-disc         { background: #f3eefb; color: var(--icon-discussion); border: 2px solid var(--icon-discussion); }
   .icon-disc.student { border-style: dashed; }
+  .icon-hw-sub       { background: var(--icon-submit-bg); color: var(--icon-submit); border: 2px solid var(--icon-submit); }
+  .icon-read         { background: #fbf3e4; color: #a86a12; border: 2px solid #a86a12; }
   .icon-wrap:hover { transform: scale(1.15) translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,0.16); }
   .icon-stack { position: relative; display: inline-flex; width: 34px; height: 34px; cursor: pointer; flex-shrink: 0; }
   .icon-stack .icon-back  { position: absolute; bottom: 0; right: 0; z-index: 1; border-style: dashed; transition: transform 0.12s ease; }
@@ -857,14 +859,12 @@
               {%- if has_stud_msg -%}{%- set icons.list = icons.list + [('msg student', 'Student message')] -%}{%- endif -%}
               {%- if has_instr_disc -%}{%- set icons.list = icons.list + [('disc', 'Instructor discussion reply')] -%}{%- endif -%}
               {%- if has_stud_disc -%}{%- set icons.list = icons.list + [('disc student', 'Student discussion')] -%}{%- endif -%}
-              {%- if icons.list | length > 1 -%}
-                <span class="icon-stack">
-                  <span class="icon-wrap icon-{{ icons.list[1][0] }} icon-back" title="{{ icons.list[1][1] }}"><svg><use href="#ico-{{ icons.list[1][0].split()[0] }}"/></svg></span>
-                  <span class="icon-wrap icon-{{ icons.list[0][0] }} icon-front" title="{{ icons.list[0][1] }}"><svg><use href="#ico-{{ icons.list[0][0].split()[0] }}"/></svg></span>
-                </span>
-              {%- elif icons.list | length == 1 -%}
-                <span class="icon-wrap icon-{{ icons.list[0][0] }}" title="{{ icons.list[0][1] }}"><svg><use href="#ico-{{ icons.list[0][0].split()[0] }}"/></svg></span>
-              {%- endif -%}
+              {%- set sub_kinds = day_submission_kinds.get(day, []) -%}
+              {%- if 'homework' in sub_kinds -%}{%- set icons.list = icons.list + [('hw-sub', 'Homework submission')] -%}{%- endif -%}
+              {%- if 'reading' in sub_kinds -%}{%- set icons.list = icons.list + [('read', 'Reading submission')] -%}{%- endif -%}
+              {%- for cls, label in icons.list -%}
+                <span class="icon-wrap icon-{{ cls }}" title="{{ label }}"><svg><use href="#ico-{{ cls.split()[0] if cls not in ('hw-sub',) else 'hw' }}"/></svg></span>
+              {%- endfor -%}
             {%- endif -%}
           </div>
         </div>

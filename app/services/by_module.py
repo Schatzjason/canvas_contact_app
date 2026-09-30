@@ -62,6 +62,52 @@ def _icon_for(event_type, late=False):
     return ('icon-msg', 'msg')
 
 
+def classify_submissions(course_id, sub_ids):
+    """Map submission source_ids to {'kind': 'reading'|'homework', 'name', 'late'}.
+
+    An assignment counts as a reading when its assignment group's name
+    contains "read"; everything else is homework. Reads only the cache, so
+    submissions whose assignment isn't cached default to homework.
+    """
+    if not sub_ids:
+        return {}
+    ag_row = CanvasCache.query.filter_by(cache_key=_cache_key(
+        f'/api/v1/courses/{course_id}/assignment_groups', None)).first()
+    reading_groups = set()
+    if ag_row and isinstance(ag_row.response_json, list):
+        reading_groups = {g['id'] for g in ag_row.response_json
+                          if 'read' in (g.get('name') or '').lower()}
+    arr = ("CASE WHEN jsonb_typeof(response_json::jsonb) = 'array' "
+           "THEN response_json::jsonb ELSE '[]'::jsonb END")
+    subs = db.session.execute(text(f"""
+        SELECT (s->>'id')::bigint AS sub_id,
+               (s->>'assignment_id')::bigint AS assignment_id,
+               (s->>'late')::boolean AS late
+        FROM canvas_cache, jsonb_array_elements({arr}) AS s
+        WHERE (s->>'assignment_id') IS NOT NULL
+          AND (s->>'id')::bigint = ANY(:ids)
+    """), {'ids': list(sub_ids)}).fetchall()
+    aids = list({r.assignment_id for r in subs if r.assignment_id is not None})
+    assignments = {}
+    if aids:
+        assignments = {r.aid: r for r in db.session.execute(text(f"""
+            SELECT (a->>'id')::bigint AS aid,
+                   a->>'name' AS name,
+                   (a->>'assignment_group_id')::bigint AS group_id
+            FROM canvas_cache, jsonb_array_elements({arr}) AS a
+            WHERE (a->>'id')::bigint = ANY(:ids)
+        """), {'ids': aids}).fetchall()}
+    out = {}
+    for r in subs:
+        a = assignments.get(r.assignment_id)
+        out[r.sub_id] = {
+            'kind': 'reading' if a and a.group_id in reading_groups else 'homework',
+            'name': (a.name if a else '') or '',
+            'late': bool(r.late),
+        }
+    return out
+
+
 def _drawer_label(event_type):
     return {
         'conversation': 'Instructor Message',

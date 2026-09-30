@@ -406,6 +406,38 @@ def test_student_page_shows_group_conversation_icon(client):
     assert 'Group message' in html
 
 
+def test_student_page_timeline_shows_all_six_event_kinds(client):
+    """Every kind of activity the student page promises must render an icon."""
+    from app.services.by_module import _cache_key
+    db.session.add(CanvasCache(
+        cache_key=_cache_key(f'/api/v1/courses/{COURSE_ID}/assignment_groups', None),
+        response_json=[{'id': 1, 'name': 'Homework'}, {'id': 2, 'name': 'Readings'}],
+        fetched_at=datetime.now(timezone.utc), ttl_seconds=3600))
+    db.session.add(CanvasCache(
+        cache_key='assignments-fixture',
+        response_json=[
+            {'id': 11, 'name': 'HW 1', 'assignment_group_id': 1},
+            {'id': 12, 'name': 'Reading 1', 'assignment_group_id': 2},
+            {'id': 13, 'name': 'Old', 'assignment_group_id': 1}],
+        fetched_at=datetime.now(timezone.utc), ttl_seconds=3600))
+    db.session.add(CanvasCache(
+        cache_key='submissions-fixture',
+        response_json=[
+            {'id': 5001, 'assignment_id': 11, 'late': False},
+            {'id': 5002, 'assignment_id': 12, 'late': False}],
+        fetched_at=datetime.now(timezone.utc), ttl_seconds=3600))
+    db.session.commit()
+    for i, (etype, sid) in enumerate([
+            ('student_message', 1), ('conversation', 2), ('discussion_entry', 3),
+            ('discussion_instructor_reply', 4), ('submission', 5001), ('submission', 5002)]):
+        _seed_event(days_ago=1, event_type=etype, source_id=sid)
+    with patch('app.routes.dashboard.CanvasClient', return_value=_mock_client_with_name()):
+        html = client.get(f'/course/{COURSE_ID}/student/{STUDENT_A}').data.decode()
+    for title in ('Student message', 'Instructor message', 'Student discussion',
+                  'Instructor discussion reply', 'Homework submission', 'Reading submission'):
+        assert f'title="{title}"' in html, title
+
+
 # ---------------------------------------------------------------------------
 # Notes (save_note endpoint)
 # ---------------------------------------------------------------------------
