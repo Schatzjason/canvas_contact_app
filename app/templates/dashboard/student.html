@@ -1562,6 +1562,11 @@ const CELL_DRAWER_DATA = {{ by_module.drawer_payload | tojson }};
   var btn   = document.getElementById('refresh-btn');
   var label = document.getElementById('refresh-label');
   var running = false;
+  var userEdited = false;
+
+  // Any typing (notes, preferred name) has a debounced save that a reload
+  // would race with and lose, so remember that the user has started editing.
+  document.addEventListener('input', function () { userEdited = true; }, true);
 
   function refresh() {
     if (running) return;
@@ -1572,7 +1577,19 @@ const CELL_DRAWER_DATA = {{ by_module.drawer_payload | tojson }};
     fetch(btn.dataset.url, { method: 'POST' })
       .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
       .then(function (data) {
-        if (data.ok) { window.location.reload(); return; }
+        if (data.ok) {
+          // Don't reload under someone who is typing: the refreshed data is
+          // already stored and will show on the next page load.
+          if (userEdited) {
+            running = false;
+            btn.disabled = false;
+            btn.classList.remove('spinning');
+            label.textContent = 'Refreshed \u2013 reload to see';
+            return;
+          }
+          window.location.reload();
+          return;
+        }
         throw new Error(data.error || 'failed');
       })
       .catch(function (err) {
