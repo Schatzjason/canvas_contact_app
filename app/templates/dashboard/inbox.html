@@ -137,7 +137,16 @@
     return e;
   }
   function fmtDate(iso) {
-    return iso ? new Date(iso).toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'}) : '';
+    if (!iso) return '';
+    var d = new Date(iso);
+    var now = new Date();
+    // Whole calendar days apart in local time (not 24h windows).
+    var days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) -
+                           new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    if (days > 1 && days <= 6) return d.toLocaleDateString('en-US', {weekday: 'long'});
+    return d.toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'});
   }
   function fmtDateTime(iso) {
     if (!iso) return '';
