@@ -1517,3 +1517,37 @@ def test_inbox_reply_reports_canvas_failure(client):
         resp = client.post('/api/inbox/7/reply', json={'body': 'hello'})
     assert resp.status_code == 502
     assert InteractionEvent.query.count() == 0
+
+
+# ── Outlook side panel ───────────────────────────────────────────────────
+
+def _outlook_mock():
+    mock = _mock_client()
+    mock.get_courses.return_value = [{'id': 5, 'course_code': 'CS101', 'name': 'Java'}]
+    mock.get_enrollments.return_value = [
+        {'user_id': 2, 'user': {'name': 'Ann Lee', 'sortable_name': 'Lee, Ann',
+                                'email': 'ann@mail.ccsf.edu', 'login_id': 'ann@mail.ccsf.edu'}},
+        {'user_id': 3, 'user': {'name': 'Bob Ray', 'sortable_name': 'Ray, Bob',
+                                'email': 'bob@mail.ccsf.edu', 'login_id': 'bob@mail.ccsf.edu'}},
+    ]
+    return mock
+
+
+def test_outlook_panel_matches_by_email_and_shows_note(client):
+    db.session.add(StudentNote(course_id=5, student_canvas_id=2, content='Prefers evenings'))
+    db.session.commit()
+    with patch('app.routes.dashboard.CanvasClient', return_value=_outlook_mock()):
+        html = client.get('/outlook-panel?email=me@ccsf.edu&email=ANN@mail.ccsf.edu').data.decode()
+    assert 'Ann Lee' in html and 'Prefers evenings' in html and 'Bob Ray' not in html
+
+
+def test_outlook_panel_falls_back_to_name(client):
+    with patch('app.routes.dashboard.CanvasClient', return_value=_outlook_mock()):
+        html = client.get('/outlook-panel?name=Bob Ray').data.decode()
+    assert 'Bob Ray' in html
+
+
+def test_outlook_panel_no_match_and_no_candidates(client):
+    with patch('app.routes.dashboard.CanvasClient', return_value=_outlook_mock()):
+        assert 'No tracked student matches' in client.get('/outlook-panel?email=x@y.com').data.decode()
+        assert 'Open a student' in client.get('/outlook-panel').data.decode()

@@ -1,17 +1,42 @@
 {
   "manifest_version": 3,
   "name": "Contact Tracker Link",
-  "version": "0.1.0",
-  "description": "Right-click a student's name in Canvas to open their page in the local Canvas Contact Tracker app.",
-  "permissions": ["contextMenus", "tabs", "storage"],
+  "version": "0.2.0",
+  "description": "Right-click a student's name in Canvas to open their page in the local Canvas Contact Tracker app, and show the student's notes beside the open email in Outlook on the web.",
+  "permissions": [
+    "contextMenus",
+    "tabs",
+    "storage",
+    "sidePanel"
+  ],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["https://ccsf.instructure.com/conversations*"],
-      "js": ["content-inbox.js"]
+      "matches": [
+        "https://ccsf.instructure.com/conversations*"
+      ],
+      "js": [
+        "content-inbox.js"
+      ]
+    },
+    {
+      "matches": [
+        "https://outlook.cloud.microsoft/*",
+        "https://outlook.office.com/*",
+        "https://outlook.office365.com/*"
+      ],
+      "js": [
+        "content-outlook.js"
+      ]
     }
   ],
-  "options_page": "options.html"
+  "options_page": "options.html",
+  "action": {
+    "default_title": "Student notes (Outlook)"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  }
 }

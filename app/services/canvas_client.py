@@ -146,11 +146,12 @@ class CanvasClient:
         })
 
     def get_enrollments(self, course_id):
-        """Active student enrollments for a course (cached 24 h), including total scores."""
+        """Active student enrollments for a course (cached 24 h), including total
+        scores and each student's email (used to match Outlook senders)."""
         return self._get_all_pages(
             f'/api/v1/courses/{course_id}/enrollments',
             params={'type[]': 'StudentEnrollment', 'state[]': 'active',
-                    'include[]': 'total_scores'},
+                    'include[]': ['total_scores', 'email']},
             ttl=TTL_ENROLLMENTS,
         )
 

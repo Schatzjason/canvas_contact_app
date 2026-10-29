@@ -1648,3 +1648,79 @@ def api_inbox_reply(conversation_id):
         db.session.rollback()
         current_app.logger.error('Reply sent but recording it failed: %s', exc)
     return {'ok': True}
+
+
+# ── Outlook side panel ───────────────────────────────────────────────────
+
+_EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+
+
+def _norm_name(name):
+    return ' '.join((name or '').lower().replace(',', ' ').split())
+
+
+def _find_outlook_students(emails, names):
+    """Tracked students matching an Outlook message's sender. `emails` and
+    `names` are candidates in page order (sender first); the first candidate
+    that matches anyone wins, and every course that student is in is returned.
+    Emails are matched exactly; names only when no email matched."""
+    client = CanvasClient()
+    try:
+        courses = client.get_courses()
+    except Exception as exc:
+        current_app.logger.warning('Outlook lookup: courses failed: %s', exc)
+        return []
+    people = []   # (course, enrollment)
+    for c in courses:
+        try:
+            enrs = client.get_enrollments(c['id'])
+        except Exception:
+            continue
+        people.extend((c, e) for e in enrs)
+
+    def hits(pred):
+        return [(c, e) for c, e in people if pred(e.get('user', {}))]
+
+    found = []
+    for email in emails:
+        email = email.strip().lower()
+        found = hits(lambda u: email in ((u.get('email') or '').lower(),
+                                         (u.get('login_id') or '').lower()))
+        if found:
+            break
+    if not found:
+        for name in names:
+            n = _norm_name(name)
+            if not n:
+                continue
+            found = hits(lambda u: n in (_norm_name(u.get('name')),
+                                         _norm_name(u.get('sortable_name'))))
+            if found:
+                break
+    return found
+
+
+@bp.route('/outlook-panel')
+def outlook_panel():
+    """Compact student panel for the Chrome extension's side panel, shown
+    next to whichever Outlook message is open. ?email=…&name=… (repeatable)."""
+    emails = [e for e in request.args.getlist('email') if _EMAIL_RE.match(e.strip())][:10]
+    names = [n for n in request.args.getlist('name') if n.strip()][:10]
+    cards = []
+    for c, e in _find_outlook_students(emails, names):
+        sid, cid = e['user_id'], c['id']
+        u = e.get('user', {})
+        note = StudentNote.query.filter_by(course_id=cid, student_canvas_id=sid).first()
+        labels = (StudentLabel.query.filter_by(course_id=cid, student_canvas_id=sid)
+                  .join(Label).order_by(Label.name).all())
+        cards.append({
+            'name': u.get('name', f'Student {sid}'),
+            'course': c.get('course_code') or c.get('name', ''),
+            'url': url_for('dashboard.student', course_id=cid, student_id=sid),
+            'note_url': url_for('dashboard.save_note', course_id=cid, student_id=sid),
+            'preferred_name': (note.preferred_name if note else None) or '',
+            'note': note.content if note else '',
+            'labels': [{'name': sl.label.name, 'color': sl.label.color} for sl in labels],
+        })
+    return render_template('dashboard/outlook_panel.html', cards=cards,
+                           has_candidates=bool(emails or names))

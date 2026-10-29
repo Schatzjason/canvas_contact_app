@@ -31,6 +31,9 @@ def create_app():
     # render instead of each route computing it separately.
     @app.context_processor
     def inject_search_students():
+        from flask import request
+        if request.endpoint == 'dashboard.outlook_panel':
+            return {}  # standalone side-panel page: no nav search, skip the Canvas calls
         return {'search_students': dashboard.build_search_students()}
 
     from app.cli import register_commands

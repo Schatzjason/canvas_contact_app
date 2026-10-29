@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Student — Canvas Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --border: #e4e2dc; --border-strong: #c8c4bb; --text-primary: #1a1915; --text-secondary: #6b6760; --text-tertiary: #9b9893; --accent: #c44b1e; --mono: 'IBM Plex Mono', monospace; --sans: 'IBM Plex Sans', sans-serif; }
+    body { font-family: var(--sans); background: #f1f0ec; color: var(--text-primary); }
+    .stu { padding: 16px 16px 6px; }
+    .stu + .stu { border-top: 1px solid var(--border-strong); }
+    .stu-name { font-size: 15px; font-weight: 600; color: var(--text-primary); text-decoration: none; }
+    a.stu-name:hover { color: var(--accent); text-decoration: underline; }
+    .stu-course { font-family: var(--mono); font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+    .stu-h { font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); margin: 14px 0 6px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+    .chip { font-family: var(--mono); font-size: 11px; color: #fff; padding: 2px 8px; border-radius: 10px; background: #6b6760; }
+    .none { font-size: 12px; font-style: italic; color: var(--text-tertiary); }
+    .notes-textarea { width: 100%; background: #fff; border: 1px solid var(--border-strong); border-radius: 8px; padding: 10px 12px; font-family: var(--sans); font-size: 13px; line-height: 1.65; color: var(--text-primary); resize: none; outline: none; overflow: hidden; }
+    .notes-textarea:focus { box-shadow: 0 0 0 3px rgba(0,0,0,0.04); }
+    .notes-status { font-family: var(--mono); font-size: 10px; color: var(--text-tertiary); margin: 5px 0 10px; min-height: 14px; transition: opacity 0.3s; }
+    .empty { padding: 28px 16px; font-size: 13px; color: var(--text-tertiary); line-height: 1.5; }
+  </style>
+</head>
+<body>
+{% for c in cards %}
+  <div class="stu">
+    <a class="stu-name" href="{{ c.url }}" target="_blank" rel="noopener">{{ c.name }}</a>
+    <div class="stu-course">{{ c.course }}{% if c.preferred_name %} · goes by {{ c.preferred_name }}{% endif %}</div>
+    <div class="stu-h">Labels</div>
+    {% if c.labels %}
+      <div class="chips">{% for l in c.labels %}<span class="chip" style="background: {{ l.color }}">{{ l.name }}</span>{% endfor %}</div>
+    {% else %}<div class="none">None</div>{% endif %}
+    <div class="stu-h">Notes</div>
+    <textarea class="notes-textarea" data-save-url="{{ c.note_url }}" placeholder="Add notes about this student…">{{ c.note }}</textarea>
+    <div class="notes-status"></div>
+  </div>
+{% else %}
+  <div class="empty">
+    {% if has_candidates %}No tracked student matches this sender.{% else %}Open a student's email in Outlook to see their notes here.{% endif %}
+  </div>
+{% endfor %}
+<script src="{{ url_for('static', filename='js/note_autosave.js') }}"></script>
+<script>
+  document.querySelectorAll('.notes-textarea').forEach(function (ta) {
+    attachNoteAutosave(ta, ta.nextElementSibling, ta.dataset.saveUrl);
+  });
+</script>
+</body>
+</html>
