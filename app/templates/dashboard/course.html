@@ -310,6 +310,24 @@
     min-width: 200px;
     letter-spacing: 0.06em;
   }
+  table.timeline thead th.col-student .newtab-switch {
+    display: inline-flex; align-items: center; gap: 6px; margin-left: 12px;
+    font-size: 11px; font-weight: 400; letter-spacing: 0; text-transform: none;
+    cursor: pointer; user-select: none;
+  }
+  .newtab-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .newtab-track {
+    position: relative; width: 26px; height: 14px; border-radius: 7px;
+    background: var(--border); transition: background 0.15s ease;
+  }
+  .newtab-track::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 10px; height: 10px; border-radius: 50%; background: var(--surface);
+    transition: transform 0.15s ease;
+  }
+  .newtab-switch input:checked + .newtab-track { background: var(--text-today); }
+  .newtab-switch input:checked + .newtab-track::after { transform: translateX(12px); }
+  .newtab-switch input:focus-visible + .newtab-track { outline: 2px solid var(--text-today); outline-offset: 2px; }
   table.timeline thead th.col-today {
     color: var(--text-today);
     font-weight: 600;
@@ -676,7 +694,13 @@
     <thead>
       <tr>
         <th class="col-check"><input type="checkbox" class="select-all-cb" data-table="table-timeline"></th>
-        <th class="col-student">Student</th>
+        <th class="col-student">Student
+          <label class="newtab-switch" title="Open student pages in a new tab">
+            <input type="checkbox" class="newtab-cb">
+            <span class="newtab-track"></span>
+            <span class="newtab-label">Open in new tab</span>
+          </label>
+        </th>
         {% for day in days %}
           <th{% if day == today %} class="col-today"{% endif %}>{{ day.month }}/{{ day.day }}</th>
         {% endfor %}
@@ -795,7 +819,13 @@
     <thead>
       <tr>
         <th class="col-check"><input type="checkbox" class="select-all-cb" data-table="table-submissions"></th>
-        <th class="col-student">Student</th>
+        <th class="col-student">Student
+          <label class="newtab-switch" title="Open student pages in a new tab">
+            <input type="checkbox" class="newtab-cb">
+            <span class="newtab-track"></span>
+            <span class="newtab-label">Open in new tab</span>
+          </label>
+        </th>
         {% for day in days %}
           <th{% if day == today %} class="col-today"{% endif %}>{{ day.month }}/{{ day.day }}</th>
         {% endfor %}
@@ -1326,6 +1356,31 @@
         alert('Refresh failed.');
       });
   });
+})();
+</script>
+<script>
+(function () {
+  // "Open in new tab" switch in the Student column header; shared by both tables, remembered per browser.
+  var KEY = 'studentLinksNewTab';
+  var switches = document.querySelectorAll('.newtab-cb');
+  if (!switches.length) return;
+  var on = false;
+  try { on = localStorage.getItem(KEY) === '1'; } catch (e) {}
+  function apply() {
+    switches.forEach(function (cb) { cb.checked = on; });
+    document.querySelectorAll('a.student-name').forEach(function (a) {
+      if (on) { a.target = '_blank'; a.rel = 'noopener'; }
+      else { a.removeAttribute('target'); a.removeAttribute('rel'); }
+    });
+  }
+  switches.forEach(function (cb) {
+    cb.addEventListener('change', function () {
+      on = cb.checked;
+      try { localStorage.setItem(KEY, on ? '1' : '0'); } catch (e) {}
+      apply();
+    });
+  });
+  apply();
 })();
 </script>
 {% endblock %}

@@ -1458,3 +1458,99 @@ def delete_message_template(template_id):
     db.session.delete(tpl)
     db.session.commit()
     return {'ok': True}
+
+
+# ── Inbox ────────────────────────────────────────────────────────────────
+
+INBOX_SCOPES = ('inbox', 'sent')
+
+
+@bp.route('/inbox')
+def inbox():
+    return render_template('dashboard/inbox.html')
+
+
+@bp.route('/api/inbox')
+def api_inbox():
+    """Newest 100 conversations for ?scope=inbox|sent, fetched live."""
+    scope = request.args.get('scope', 'inbox')
+    if scope not in INBOX_SCOPES:
+        return {'ok': False, 'error': 'bad scope'}, 400
+    try:
+        client = CanvasClient()
+        convs = client.get_inbox_page(scope)
+    except Exception as exc:
+        current_app.logger.warning('Inbox fetch failed: %s', exc)
+        return {'ok': False, 'error': str(exc)}, 502
+    try:
+        me = client.get_current_user().get('id')
+    except Exception:
+        me = None  # filter then also matches the instructor's own name
+    return {'ok': True, 'conversations': [{
+        'id': c['id'],
+        'subject': c.get('subject') or '(no subject)',
+        'preview': c.get('last_message') or '',
+        'last_message_at': c.get('last_message_at'),
+        'message_count': c.get('message_count', 0),
+        'unread': c.get('workflow_state') == 'unread',
+        'starred': bool(c.get('starred')),
+        'names': [p.get('name', '') for p in c.get('participants', [])],
+        # The other people in the thread — what the search box matches on.
+        'others': [p.get('name', '') for p in c.get('participants', []) if p.get('id') != me],
+    } for c in convs]}
+
+
+def _course_id_from_context(context_code):
+    m = re.fullmatch(r'course_(\d+)', context_code or '')
+    return int(m.group(1)) if m else None
+
+
+@bp.route('/api/inbox/<int:conversation_id>')
+def api_inbox_conversation(conversation_id):
+    """One conversation's messages plus the tracker's labels/notes for any
+    students in it. Fetching it live marks it read in Canvas."""
+    try:
+        conv = CanvasClient().get_conversation_live(conversation_id)
+    except Exception as exc:
+        current_app.logger.warning('Conversation %s fetch failed: %s', conversation_id, exc)
+        return {'ok': False, 'error': str(exc)}, 502
+
+    names = {p['id']: p.get('name', '') for p in conv.get('participants', [])}
+    course_id = _course_id_from_context(conv.get('context_code'))
+
+    students = []
+    if course_id is not None:
+        records = StudentRecord.query.filter(
+            StudentRecord.course_id == course_id,
+            StudentRecord.student_canvas_id.in_(list(names)),
+        ).order_by(StudentRecord.sortable_name).all()
+        for rec in records:
+            note = StudentNote.query.filter_by(
+                course_id=course_id, student_canvas_id=rec.student_canvas_id).first()
+            labels = (StudentLabel.query
+                      .filter_by(course_id=course_id, student_canvas_id=rec.student_canvas_id)
+                      .join(Label).order_by(Label.name).all())
+            students.append({
+                'id': rec.student_canvas_id,
+                'name': rec.name,
+                'url': url_for('dashboard.student', course_id=course_id,
+                               student_id=rec.student_canvas_id),
+                'preferred_name': (note.preferred_name if note else None) or '',
+                'note': note.content if note else '',
+                'labels': [{'name': sl.label.name, 'color': sl.label.color} for sl in labels],
+            })
+
+    return {'ok': True, 'conversation': {
+        'id': conv['id'],
+        'subject': conv.get('subject') or '(no subject)',
+        'course_name': conv.get('context_name') or '',
+        'messages': [{
+            'id': m['id'],
+            'author': names.get(m.get('author_id'), 'Unknown'),
+            'created_at': m.get('created_at'),
+            'body': m.get('body') or '',
+            'attachments': [{'name': a.get('display_name') or a.get('filename', 'file'),
+                             'url': a.get('url', '')} for a in m.get('attachments', [])],
+        } for m in conv.get('messages', [])],  # Canvas returns newest first
+        'students': students,
+    }}

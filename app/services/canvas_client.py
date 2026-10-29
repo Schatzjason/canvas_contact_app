@@ -187,6 +187,19 @@ class CanvasClient:
         self._cache_write(self._make_cache_key(path, None), data, TTL_CONVERSATIONS)
         return data
 
+    def get_inbox_page(self, scope='inbox', per_page=100):
+        """Newest `per_page` conversation summaries for a scope ('inbox' or
+        'sent'), always live — the inbox page shows unread state, which a
+        cached list would get wrong."""
+        return self._get('/api/v1/conversations',
+                         params={'scope': scope, 'per_page': per_page})
+
+    def get_conversation_live(self, conversation_id):
+        """One conversation with all its messages, always live. Canvas marks
+        the conversation read as a side effect of this GET (the inbox page
+        relies on that)."""
+        return self._get(f'/api/v1/conversations/{conversation_id}')
+
     # When stream_conversations is called with a since date (sync context),
     # only trust the cache if it was fetched very recently.  The normal 2-hour
     # TTL is too long — a student reply that arrives between the cache snapshot

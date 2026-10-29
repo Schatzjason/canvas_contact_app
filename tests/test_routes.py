@@ -1411,3 +1411,53 @@ def test_student_page_shows_conversation_message_text_in_drawer(client):
     with patch('app.routes.dashboard.CanvasClient', return_value=_mock_client_with_name('Alice Smith')):
         response = client.get(f'/course/{COURSE_ID}/student/{STUDENT_A}')
     assert 'Following up on the last assignment.' in response.data.decode()
+
+
+# ── Inbox ────────────────────────────────────────────────────────────────
+
+def test_inbox_page_renders(client):
+    resp = client.get('/inbox')
+    assert resp.status_code == 200
+    assert b'id="scope"' in resp.data
+
+
+def test_api_inbox_maps_conversations(client):
+    mock = _mock_client()
+    mock.get_current_user.return_value = {'id': 2}
+    mock.get_inbox_page.return_value = [{
+        'id': 7, 'subject': 'Hi', 'last_message': 'preview', 'workflow_state': 'unread',
+        'last_message_at': '2026-10-28T18:00:00Z', 'message_count': 2, 'starred': True,
+        'participants': [{'id': 1, 'name': 'Ann'}, {'id': 2, 'name': 'Jason'}],
+    }]
+    with patch('app.routes.dashboard.CanvasClient', return_value=mock):
+        data = client.get('/api/inbox?scope=sent').get_json()
+    mock.get_inbox_page.assert_called_once_with('sent')
+    assert data['conversations'][0]['unread'] is True
+    assert data['conversations'][0]['names'] == ['Ann', 'Jason']
+    assert data['conversations'][0]['others'] == ['Ann']
+
+
+def test_api_inbox_rejects_bad_scope(client):
+    assert client.get('/api/inbox?scope=nope').status_code == 400
+
+
+def test_api_inbox_conversation_includes_student_notes(client):
+    db.session.add(StudentRecord(course_id=5, student_canvas_id=2, name='Ann Lee',
+                                 sortable_name='Lee, Ann'))
+    db.session.add(StudentNote(course_id=5, student_canvas_id=2, content='Has a knee injury',
+                               preferred_name='Annie'))
+    db.session.commit()
+    mock = _mock_client()
+    mock.get_conversation_live.return_value = {
+        'id': 7, 'subject': 'Hi', 'context_code': 'course_5', 'context_name': 'Java',
+        'participants': [{'id': 1, 'name': 'Jason'}, {'id': 2, 'name': 'Ann Lee'}],
+        'messages': [{'id': 1, 'author_id': 2, 'created_at': '2026-10-28T18:00:00Z',
+                      'body': 'hello', 'attachments': []}],
+    }
+    with patch('app.routes.dashboard.CanvasClient', return_value=mock):
+        conv = client.get('/api/inbox/7').get_json()['conversation']
+    assert conv['messages'][0]['author'] == 'Ann Lee'
+    assert [s['id'] for s in conv['students']] == [2]
+    assert conv['students'][0]['note'] == 'Has a knee injury'
+    assert conv['students'][0]['preferred_name'] == 'Annie'
+    assert conv['students'][0]['url'] == '/course/5/student/2'
