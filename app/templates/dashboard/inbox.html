@@ -106,14 +106,16 @@
   .msg-attach a { color: #3b6fd4; }
 
   /* student panel */
-  .stu { padding: 18px 18px 8px; border-bottom: 1px solid var(--border); }
+  #student-pane { background: #f1f0ec; }
+  .stu { padding: 18px 18px 8px; }
+  .stu + .stu { border-top: 1px solid var(--border-strong); }
   .stu-name { font-size: 15px; font-weight: 600; color: var(--text-primary); text-decoration: none; }
   a.stu-name:hover { color: var(--accent); text-decoration: underline; }
   .stu-goes { font-family: var(--mono); font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
   .stu-h { font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); margin: 14px 0 6px; }
   .chips { display: flex; flex-wrap: wrap; gap: 5px; }
   .chip { font-family: var(--mono); font-size: 11px; color: #fff; padding: 2px 8px; border-radius: 10px; }
-  .notes-textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: var(--sans); font-size: 13px; line-height: 1.65; color: var(--text-primary); resize: none; outline: none; overflow: hidden; transition: border-color 0.15s, box-shadow 0.15s; }
+  .notes-textarea { width: 100%; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; padding: 10px 12px; font-family: var(--sans); font-size: 13px; line-height: 1.65; color: var(--text-primary); resize: none; outline: none; overflow: hidden; transition: border-color 0.15s, box-shadow 0.15s; }
   .notes-textarea::placeholder { color: var(--text-tertiary); font-style: italic; }
   .notes-textarea:focus { border-color: var(--border-strong); box-shadow: 0 0 0 3px rgba(0,0,0,0.04); }
   .notes-status { font-family: var(--mono); font-size: 10px; color: var(--text-tertiary); margin: 5px 0 10px; min-height: 14px; transition: opacity 0.3s; }
