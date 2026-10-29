@@ -113,7 +113,10 @@
   .stu-h { font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); margin: 14px 0 6px; }
   .chips { display: flex; flex-wrap: wrap; gap: 5px; }
   .chip { font-family: var(--mono); font-size: 11px; color: #fff; padding: 2px 8px; border-radius: 10px; }
-  .stu-note { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.55; color: var(--text-secondary); padding-bottom: 14px; }
+  .notes-textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: var(--sans); font-size: 13px; line-height: 1.65; color: var(--text-primary); resize: none; outline: none; overflow: hidden; transition: border-color 0.15s, box-shadow 0.15s; }
+  .notes-textarea::placeholder { color: var(--text-tertiary); font-style: italic; }
+  .notes-textarea:focus { border-color: var(--border-strong); box-shadow: 0 0 0 3px rgba(0,0,0,0.04); }
+  .notes-status { font-family: var(--mono); font-size: 10px; color: var(--text-tertiary); margin: 5px 0 10px; min-height: 14px; transition: opacity 0.3s; }
   .none { font-size: 12px; font-style: italic; color: var(--text-tertiary); }
 
   .empty { padding: 40px 24px; color: var(--text-tertiary); font-size: 14px; }
@@ -140,6 +143,7 @@
   <div class="pane" id="student-pane"></div>
 </div>
 
+<script src="{{ url_for('static', filename='js/note_autosave.js') }}"></script>
 <script>
 (function () {
   var scopeSel = document.getElementById('scope');
@@ -344,7 +348,14 @@
     ta.setSelectionRange(ta.value.length, ta.value.length);
   }
 
+  var noteSavers = [];
+  function flushNotes() {
+    noteSavers.forEach(function (n) { n.flush(); });
+    noteSavers = [];
+  }
+
   function renderStudents(students) {
+    flushNotes();   // save any pending edit before the panel is replaced
     studentEl.innerHTML = '';
     if (!students.length) {
       studentEl.appendChild(el('div', 'empty', 'No tracked student in this conversation.'));
@@ -369,8 +380,14 @@
         box.appendChild(el('div', 'none', 'None'));
       }
       box.appendChild(el('div', 'stu-h', 'Notes'));
-      box.appendChild(s.note ? el('div', 'stu-note', s.note) : el('div', 'none', 'No notes'));
+      var ta = el('textarea', 'notes-textarea');
+      ta.value = s.note;
+      ta.placeholder = 'Add notes about this student\u2026';
+      var status = el('div', 'notes-status');
+      box.appendChild(ta);
+      box.appendChild(status);
       studentEl.appendChild(box);
+      noteSavers.push(attachNoteAutosave(ta, status, s.note_url));  // after append so sizing works
     });
   }
 
@@ -381,6 +398,7 @@
     if (row) row.classList.add('selected');
     threadEl.innerHTML = '';
     threadEl.appendChild(el('div', 'empty', 'Loading…'));
+    flushNotes();
     studentEl.innerHTML = '';
     history.replaceState(null, '', '#' + id);
     getJson('/api/inbox/' + id).then(function (data) {
@@ -408,6 +426,7 @@
     selectedId = null;
     threadEl.innerHTML = '';
     threadEl.appendChild(el('div', 'empty', 'Select a conversation.'));
+    flushNotes();
     studentEl.innerHTML = '';
     history.replaceState(null, '', location.pathname + '?scope=' + scopeSel.value);
     loadList();

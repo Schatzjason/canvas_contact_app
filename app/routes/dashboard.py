@@ -1558,6 +1558,8 @@ def api_inbox_conversation(conversation_id):
                            student_id=rec.student_canvas_id),
             'preferred_name': (note.preferred_name if note else None) or '',
             'note': note.content if note else '',
+            'note_url': url_for('dashboard.save_note', course_id=course_id,
+                                student_id=rec.student_canvas_id),
             'labels': [{'name': sl.label.name, 'color': sl.label.color} for sl in labels],
         })
 

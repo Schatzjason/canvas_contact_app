@@ -1069,52 +1069,13 @@ const CELL_DRAWER_DATA = {{ by_module.drawer_payload | tojson }};
 })();
 </script>
 
+<script src="{{ url_for('static', filename='js/note_autosave.js') }}"></script>
 <script>
-(function () {
-  var ta     = document.getElementById('notes-area');
-  var status = document.getElementById('notes-status');
-  var saveUrl = {{ url_for('dashboard.save_note', course_id=course.id, student_id=student_id) | tojson }};
-  var LINE_HEIGHT = 1.65;   // matches CSS line-height
-  var MIN_ROWS    = 3;
-  var EXTRA_ROWS  = 2;
-  var MAX_ROWS    = 15;
-  var saveTimer   = null;
-
-  function resize() {
-    var content = ta.value;
-    var lineCount = content === '' ? 0 : content.split('\n').length;
-    var rows = content === ''
-      ? MIN_ROWS
-      : Math.min(MAX_ROWS, lineCount + EXTRA_ROWS);
-    rows = Math.max(MIN_ROWS, rows);
-    ta.rows = rows;
-  }
-
-  function save() {
-    fetch(saveUrl, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({content: ta.value}),
-    }).then(function () {
-      status.textContent = 'Saved';
-      status.style.opacity = '1';
-      setTimeout(function () { status.style.opacity = '0'; }, 1500);
-    }).catch(function () {
-      status.textContent = 'Save failed';
-      status.style.opacity = '1';
-    });
-  }
-
-  ta.addEventListener('input', function () {
-    resize();
-    clearTimeout(saveTimer);
-    status.textContent = '';
-    saveTimer = setTimeout(save, 800);
-  });
-
-  // Set initial size on page load
-  resize();
-})();
+attachNoteAutosave(
+  document.getElementById('notes-area'),
+  document.getElementById('notes-status'),
+  {{ url_for('dashboard.save_note', course_id=course.id, student_id=student_id) | tojson }}
+);
 </script>
 
 <script>
