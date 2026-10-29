@@ -5,8 +5,6 @@
 <nav class="app-nav">
   <div class="nav-left">
     <a href="{{ url_for('dashboard.index') }}" class="nav-logo">CanvasContact<span>Tracker</span></a>
-    <span class="nav-sep">/</span>
-    <span class="nav-current">Inbox</span>
   </div>
   <div class="nav-right">
     {% include "_nav_search.html" %}
@@ -74,7 +72,30 @@
   .thread-head { position: sticky; top: 0; z-index: 1; background: var(--surface); padding: 14px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .thread-head h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
   .thread-course { font-family: var(--mono); font-size: 11px; color: var(--text-tertiary); margin-top: 3px; }
-  .btn-reply { font-family: var(--sans); font-size: 13px; padding: 6px 14px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text-secondary); cursor: not-allowed; }
+  .btn-reply { font-family: var(--sans); font-size: 13px; font-weight: 500; padding: 6px 16px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text-primary); cursor: pointer; }
+  .btn-reply:hover { border-color: #3b6fd4; color: #3b6fd4; }
+  .composer { padding: 16px 24px 12px; border-bottom: 1px solid var(--border); background: #fafaf8; }
+  .composer-label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; color: var(--text-tertiary); margin-bottom: 8px; }
+  .composer textarea { width: 100%; min-height: 140px; resize: vertical; font-family: var(--sans); font-size: 15px; line-height: 1.6; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text-primary); outline: none; }
+  .composer textarea:focus { border-color: #3b6fd4; box-shadow: 0 0 0 3px rgba(59, 111, 212, 0.12); }
+  .composer-error { color: var(--accent); font-size: 13px; margin-top: 6px; }
+  .composer-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .btn-send { padding: 8px 20px; background: #3b6fd4; color: #fff; border: none; border-radius: 6px; font-family: var(--sans); font-size: 14px; font-weight: 500; cursor: pointer; }
+  .btn-send:hover:not(:disabled) { background: #2d5cbf; }
+  .btn-send:disabled { opacity: 0.6; cursor: default; }
+  .btn-cancel { padding: 8px 16px; background: none; color: var(--text-secondary); border: 1px solid var(--border-strong); border-radius: 6px; font-family: var(--sans); font-size: 14px; cursor: pointer; }
+  .tpl-wrap { position: relative; margin-left: auto; }
+  .tpl-trigger { font-family: var(--mono); font-size: 12px; color: var(--text-secondary); padding: 8px 4px 8px 12px; cursor: default; user-select: none; }
+  .tpl-wrap:hover .tpl-trigger, .tpl-wrap:focus-within .tpl-trigger { color: #3b6fd4; }
+  .tpl-menu { display: none; position: absolute; right: 0; bottom: 100%; width: 320px; max-height: 260px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.12); z-index: 5; }
+  .tpl-wrap:hover .tpl-menu, .tpl-wrap:focus-within .tpl-menu { display: block; }
+  .tpl-wrap.picked .tpl-menu { display: none; }
+  .tpl-opt { display: block; width: 100%; text-align: left; background: none; border: none; border-bottom: 1px solid var(--border); padding: 9px 12px; cursor: pointer; font-family: var(--sans); }
+  .tpl-opt:last-child { border-bottom: none; }
+  .tpl-opt:hover { background: var(--selected); }
+  .tpl-opt-name { display: block; font-size: 13px; font-weight: 500; color: var(--text-primary); }
+  .tpl-opt-body { display: block; font-size: 12px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tpl-none { padding: 10px 12px; font-size: 12px; color: var(--text-tertiary); }
   .msg { padding: 18px 24px; border-bottom: 1px solid var(--border); }
   .msg-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
   .avatar { width: 38px; height: 38px; border-radius: 50%; border: 1.5px solid #8aa6c8; color: #3b6fd4; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 500; flex-shrink: 0; }
@@ -127,6 +148,7 @@
   var allConvs = [];
   var threadEl = document.getElementById('thread-pane');
   var studentEl = document.getElementById('student-pane');
+  var TEMPLATES = {{ templates | tojson }};
   var selectedId = null;
   var loadSeq = 0;
 
@@ -223,8 +245,8 @@
     head.appendChild(titles);
     var reply = el('button', 'btn-reply', 'Reply');
     reply.type = 'button';
-    reply.title = 'Replying is not available yet';
-    head.appendChild(reply);  // intentionally a no-op for now
+    reply.addEventListener('click', function () { openComposer(conv, head); });
+    head.appendChild(reply);
     threadEl.appendChild(head);
 
     conv.messages.forEach(function (m) {
@@ -247,6 +269,79 @@
       threadEl.appendChild(box);
     });
     threadEl.scrollTop = 0;
+  }
+
+  function openComposer(conv, head) {
+    var existing = threadEl.querySelector('.composer');
+    if (existing) { existing.querySelector('textarea').focus(); return; }
+
+    var box = el('div', 'composer');
+    var who = conv.students.map(function (s) { return s.name; }).join(', ');
+    box.appendChild(el('div', 'composer-label', 'Replying to ' + (who || 'this conversation')));
+    var ta = el('textarea');
+    ta.value = conv.greeting ? 'Hi ' + conv.greeting + ', ' : '';
+    box.appendChild(ta);
+    var err = el('div', 'composer-error');
+    box.appendChild(err);
+
+    var actions = el('div', 'composer-actions');
+    var send = el('button', 'btn-send', 'Send');
+    send.type = 'button';
+    var cancel = el('button', 'btn-cancel', 'Cancel');
+    cancel.type = 'button';
+    cancel.addEventListener('click', function () { box.remove(); });
+    actions.appendChild(send);
+    actions.appendChild(cancel);
+
+    var wrap = el('div', 'tpl-wrap');
+    var trigger = el('span', 'tpl-trigger', 'Templates \u25B4');
+    trigger.tabIndex = 0;
+    var menu = el('div', 'tpl-menu');
+    if (!TEMPLATES.length) menu.appendChild(el('div', 'tpl-none', 'No saved templates yet.'));
+    TEMPLATES.forEach(function (t) {
+      var opt = el('button', 'tpl-opt');
+      opt.type = 'button';
+      opt.appendChild(el('span', 'tpl-opt-name', t.name));
+      opt.appendChild(el('span', 'tpl-opt-body', t.body));
+      opt.addEventListener('click', function () {
+        // <name> is filled now so you can see it; <time> is filled on send.
+        ta.value = conv.greeting ? t.body.split('<name>').join(conv.greeting) : t.body;
+        wrap.classList.add('picked');
+        ta.focus();
+      });
+      menu.appendChild(opt);
+    });
+    wrap.addEventListener('mouseleave', function () { wrap.classList.remove('picked'); });
+    wrap.appendChild(trigger);
+    wrap.appendChild(menu);
+    actions.appendChild(wrap);
+    box.appendChild(actions);
+
+    send.addEventListener('click', function () {
+      if (!ta.value.trim()) { err.textContent = 'Write a reply first.'; return; }
+      err.textContent = '';
+      send.disabled = true;
+      send.textContent = 'Sending\u2026';
+      fetch('/api/inbox/' + conv.id + '/reply', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({body: ta.value}),
+      }).then(function (r) {
+        return r.json().catch(function () { return {ok: false, error: 'bad response'}; });
+      }).then(function (data) {
+        if (!data.ok) throw new Error(data.error || 'failed');
+        loadList();
+        openConversation(conv.id, null);
+      }).catch(function (e) {
+        send.disabled = false;
+        send.textContent = 'Send';
+        err.textContent = 'Could not send: ' + e.message;
+      });
+    });
+
+    head.after(box);
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
   }
 
   function renderStudents(students) {

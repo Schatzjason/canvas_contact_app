@@ -1467,7 +1467,9 @@ INBOX_SCOPES = ('inbox', 'sent')
 
 @bp.route('/inbox')
 def inbox():
-    return render_template('dashboard/inbox.html')
+    templates = MessageTemplate.query.order_by(MessageTemplate.created_at.desc()).all()
+    return render_template('dashboard/inbox.html', templates=[
+        {'id': t.id, 'name': t.name, 'body': t.body} for t in templates])
 
 
 @bp.route('/api/inbox')
@@ -1505,6 +1507,30 @@ def _course_id_from_context(context_code):
     return int(m.group(1)) if m else None
 
 
+def _inbox_students(conv):
+    """(course_id, [StudentRecord]) for the tracked students in a conversation."""
+    course_id = _course_id_from_context(conv.get('context_code'))
+    if course_id is None:
+        return None, []
+    ids = [p['id'] for p in conv.get('participants', [])]
+    records = StudentRecord.query.filter(
+        StudentRecord.course_id == course_id,
+        StudentRecord.student_canvas_id.in_(ids),
+    ).order_by(StudentRecord.sortable_name).all()
+    return course_id, records
+
+
+def _inbox_greeting_names(course_id, records):
+    return [_greeting_name(course_id, r.student_canvas_id, r.name) for r in records]
+
+
+def _join_names(names):
+    """'A', 'A and B', 'A, B, and C'."""
+    if len(names) <= 2:
+        return ' and '.join(names)
+    return ', '.join(names[:-1]) + ', and ' + names[-1]
+
+
 @bp.route('/api/inbox/<int:conversation_id>')
 def api_inbox_conversation(conversation_id):
     """One conversation's messages plus the tracker's labels/notes for any
@@ -1516,29 +1542,24 @@ def api_inbox_conversation(conversation_id):
         return {'ok': False, 'error': str(exc)}, 502
 
     names = {p['id']: p.get('name', '') for p in conv.get('participants', [])}
-    course_id = _course_id_from_context(conv.get('context_code'))
+    course_id, records = _inbox_students(conv)
 
     students = []
-    if course_id is not None:
-        records = StudentRecord.query.filter(
-            StudentRecord.course_id == course_id,
-            StudentRecord.student_canvas_id.in_(list(names)),
-        ).order_by(StudentRecord.sortable_name).all()
-        for rec in records:
-            note = StudentNote.query.filter_by(
-                course_id=course_id, student_canvas_id=rec.student_canvas_id).first()
-            labels = (StudentLabel.query
-                      .filter_by(course_id=course_id, student_canvas_id=rec.student_canvas_id)
-                      .join(Label).order_by(Label.name).all())
-            students.append({
-                'id': rec.student_canvas_id,
-                'name': rec.name,
-                'url': url_for('dashboard.student', course_id=course_id,
-                               student_id=rec.student_canvas_id),
-                'preferred_name': (note.preferred_name if note else None) or '',
-                'note': note.content if note else '',
-                'labels': [{'name': sl.label.name, 'color': sl.label.color} for sl in labels],
-            })
+    for rec in records:
+        note = StudentNote.query.filter_by(
+            course_id=course_id, student_canvas_id=rec.student_canvas_id).first()
+        labels = (StudentLabel.query
+                  .filter_by(course_id=course_id, student_canvas_id=rec.student_canvas_id)
+                  .join(Label).order_by(Label.name).all())
+        students.append({
+            'id': rec.student_canvas_id,
+            'name': rec.name,
+            'url': url_for('dashboard.student', course_id=course_id,
+                           student_id=rec.student_canvas_id),
+            'preferred_name': (note.preferred_name if note else None) or '',
+            'note': note.content if note else '',
+            'labels': [{'name': sl.label.name, 'color': sl.label.color} for sl in labels],
+        })
 
     return {'ok': True, 'conversation': {
         'id': conv['id'],
@@ -1553,4 +1574,75 @@ def api_inbox_conversation(conversation_id):
                              'url': a.get('url', '')} for a in m.get('attachments', [])],
         } for m in conv.get('messages', [])],  # Canvas returns newest first
         'students': students,
+        'greeting': _join_names(_inbox_greeting_names(course_id, records)),
     }}
+
+
+@bp.route('/api/inbox/<int:conversation_id>/reply', methods=['POST'])
+def api_inbox_reply(conversation_id):
+    """Post a reply to the whole conversation (explicit Send click only),
+    then record it as a contact event for each tracked student in it."""
+    body = ((request.get_json(silent=True) or {}).get('body') or '').strip()
+    if not body:
+        return {'ok': False, 'error': 'Reply is empty.'}, 400
+
+    client = CanvasClient()
+    try:
+        conv = client.get_conversation_live(conversation_id)
+    except Exception as exc:
+        current_app.logger.warning('Reply: conversation %s fetch failed: %s', conversation_id, exc)
+        return {'ok': False, 'error': str(exc)}, 502
+
+    course_id, records = _inbox_students(conv)
+    last_at = None
+    if records:
+        last_at = db.session.query(func.max(InteractionEvent.occurred_at)).filter(
+            InteractionEvent.course_id == course_id,
+            InteractionEvent.student_canvas_id == records[0].student_canvas_id,
+        ).scalar()
+    now = datetime.now(timezone.utc)
+    body = fill_placeholders(body, {
+        'first_name': _join_names(_inbox_greeting_names(course_id, records)),
+        'days_since': (now - last_at).days if last_at else None,
+    })
+
+    try:
+        result = client.add_message(conversation_id, body)
+    except Exception as exc:
+        current_app.logger.error('add_message failed for %s: %s', conversation_id, exc)
+        return {'ok': False, 'error': str(exc)}, 502
+
+    # Record the contact event; the reply is already sent, so a failure here
+    # must not report the send as failed.
+    try:
+        msgs = result.get('messages') or []
+        newest = msgs[0] if msgs else None
+        if newest and records:
+            occurred_at = now
+            if newest.get('created_at'):
+                occurred_at = datetime.fromisoformat(newest['created_at'])
+            group = len(records) > 1
+            gid = str(uuid.uuid4()) if group else None
+            events = [{
+                'course_id': course_id,
+                'student_canvas_id': r.student_canvas_id,
+                'event_type': 'group_conversation' if group else 'conversation',
+                'occurred_at': occurred_at,
+                'source_id': newest['id'],
+                'group_id': gid,
+            } for r in records]
+            stmt = pg_insert(InteractionEvent.__table__).values(events)
+            stmt = stmt.on_conflict_do_update(
+                constraint='uq_interaction_event_type_source_student',
+                set_={'occurred_at': stmt.excluded.occurred_at, 'group_id': stmt.excluded.group_id},
+            )
+            db.session.execute(stmt)
+        # Cached conversation lists would hide this message from the next sync.
+        for scope in INBOX_SCOPES:
+            key = CanvasClient._make_cache_key('/api/v1/conversations', {'scope': scope})
+            CanvasCache.query.filter_by(cache_key=key).delete()
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.error('Reply sent but recording it failed: %s', exc)
+    return {'ok': True}

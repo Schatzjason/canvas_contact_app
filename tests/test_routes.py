@@ -1461,3 +1461,59 @@ def test_api_inbox_conversation_includes_student_notes(client):
     assert conv['students'][0]['note'] == 'Has a knee injury'
     assert conv['students'][0]['preferred_name'] == 'Annie'
     assert conv['students'][0]['url'] == '/course/5/student/2'
+
+
+def _reply_conv_mock():
+    mock = _mock_client()
+    mock.get_conversation_live.return_value = {
+        'id': 7, 'subject': 'Hi', 'context_code': 'course_5', 'context_name': 'Java',
+        'participants': [{'id': 1, 'name': 'Jason'}, {'id': 2, 'name': 'Ann Lee'}],
+        'messages': [],
+    }
+    mock.add_message.return_value = {
+        'id': 7, 'messages': [{'id': 99, 'created_at': '2026-10-29T18:00:00Z', 'body': 'x'}],
+    }
+    return mock
+
+
+def test_inbox_conversation_greeting_uses_preferred_name(client):
+    db.session.add(StudentRecord(course_id=5, student_canvas_id=2, name='Ann Lee',
+                                 sortable_name='Lee, Ann'))
+    db.session.add(StudentNote(course_id=5, student_canvas_id=2, content='', preferred_name='Annie'))
+    db.session.commit()
+    with patch('app.routes.dashboard.CanvasClient', return_value=_reply_conv_mock()):
+        conv = client.get('/api/inbox/7').get_json()['conversation']
+    assert conv['greeting'] == 'Annie'
+
+
+def test_inbox_reply_sends_fills_placeholders_and_records_event(client):
+    db.session.add(StudentRecord(course_id=5, student_canvas_id=2, name='Ann Lee',
+                                 sortable_name='Lee, Ann'))
+    db.session.commit()
+    mock = _reply_conv_mock()
+    from app.services.canvas_client import CanvasClient as RealClient
+    mock_cls = MagicMock(return_value=mock)
+    mock_cls._make_cache_key = RealClient._make_cache_key  # route builds cache keys statically
+    with patch('app.routes.dashboard.CanvasClient', mock_cls):
+        resp = client.post('/api/inbox/7/reply', json={'body': 'Hi <name>, thanks'})
+    assert resp.get_json() == {'ok': True}
+    mock.add_message.assert_called_once_with(7, 'Hi Ann, thanks')
+    ev = InteractionEvent.query.one()
+    assert (ev.event_type, ev.source_id, ev.student_canvas_id) == ('conversation', 99, 2)
+
+
+def test_inbox_reply_rejects_empty_body(client):
+    mock = _reply_conv_mock()
+    with patch('app.routes.dashboard.CanvasClient', return_value=mock):
+        resp = client.post('/api/inbox/7/reply', json={'body': '   '})
+    assert resp.status_code == 400
+    mock.add_message.assert_not_called()
+
+
+def test_inbox_reply_reports_canvas_failure(client):
+    mock = _reply_conv_mock()
+    mock.add_message.side_effect = RuntimeError('boom')
+    with patch('app.routes.dashboard.CanvasClient', return_value=mock):
+        resp = client.post('/api/inbox/7/reply', json={'body': 'hello'})
+    assert resp.status_code == 502
+    assert InteractionEvent.query.count() == 0

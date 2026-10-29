@@ -187,6 +187,19 @@ class CanvasClient:
         self._cache_write(self._make_cache_key(path, None), data, TTL_CONVERSATIONS)
         return data
 
+    def add_message(self, conversation_id, body):
+        """Reply to an existing conversation (goes to everyone in it; no
+        quoted text). Body goes in the form data, not the query string,
+        so long replies don't hit URL length limits."""
+        resp = requests.post(
+            f'{self.base_url}/api/v1/conversations/{conversation_id}/add_message',
+            headers=self._auth_headers(),
+            data={'body': body},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     def get_inbox_page(self, scope='inbox', per_page=100):
         """Newest `per_page` conversation summaries for a scope ('inbox' or
         'sent'), always live — the inbox page shows unread state, which a
