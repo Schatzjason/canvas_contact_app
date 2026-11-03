@@ -1551,3 +1551,11 @@ def test_outlook_panel_no_match_and_no_candidates(client):
     with patch('app.routes.dashboard.CanvasClient', return_value=_outlook_mock()):
         assert 'No tracked student matches' in client.get('/outlook-panel?email=x@y.com').data.decode()
         assert 'Open a student' in client.get('/outlook-panel').data.decode()
+
+
+def test_outlook_panel_shows_editable_nickname(client):
+    db.session.add(StudentNote(course_id=5, student_canvas_id=2, content='', preferred_name='Annie'))
+    db.session.commit()
+    with patch('app.routes.dashboard.CanvasClient', return_value=_outlook_mock()):
+        html = client.get('/outlook-panel?email=ann@mail.ccsf.edu').data.decode()
+    assert 'class="goes-input" value="Annie"' in html

@@ -5,6 +5,8 @@
 //   note.flush();   // save right now if there are unsaved edits
 //
 // saveUrl is the student's .../note endpoint; it takes {content: "..."}.
+// Pass a 4th argument to save a different field of that endpoint instead,
+// e.g. attachNoteAutosave(input, statusEl, saveUrl, 'preferred_name').
 (function (global) {
   var LINE_HEIGHT = 1.65;   // matches the .notes-textarea CSS line-height
   var MIN_ROWS    = 3;
@@ -12,7 +14,8 @@
   var MAX_ROWS    = 15;
   var DEBOUNCE_MS = 800;
 
-  global.attachNoteAutosave = function (ta, status, saveUrl) {
+  global.attachNoteAutosave = function (ta, status, saveUrl, field) {
+    field = field || 'content';
     var saveTimer = null;
     var dirty = false;
 
@@ -32,7 +35,7 @@
       fetch(saveUrl, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({content: ta.value}),
+        body: JSON.stringify({[field]: ta.value}),
         keepalive: !!keepalive,   // lets a save survive the page closing
       }).then(function (r) {
         if (!r.ok) throw new Error('save failed');

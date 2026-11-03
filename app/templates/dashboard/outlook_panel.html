@@ -15,6 +15,10 @@
     .stu-name { font-size: 15px; font-weight: 600; color: var(--text-primary); text-decoration: none; }
     a.stu-name:hover { color: var(--accent); text-decoration: underline; }
     .stu-course { font-family: var(--mono); font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+    .goes-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+    .goes-label { font-family: var(--mono); font-size: 11px; color: var(--text-tertiary); flex-shrink: 0; }
+    .goes-input { font-family: var(--sans); font-size: 13px; color: var(--text-primary); border: 1px solid var(--border-strong); border-radius: 4px; padding: 3px 8px; width: 100%; min-width: 0; background: #fff; outline: none; }
+    .goes-input:focus { border-color: #3b6fd4; }
     .stu-h { font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); margin: 14px 0 6px; }
     .chips { display: flex; flex-wrap: wrap; gap: 5px; }
     .chip { font-family: var(--mono); font-size: 11px; color: #fff; padding: 2px 8px; border-radius: 10px; background: #6b6760; }
@@ -29,7 +33,12 @@
 {% for c in cards %}
   <div class="stu">
     <a class="stu-name" href="{{ c.url }}" target="_blank" rel="noopener">{{ c.name }}</a>
-    <div class="stu-course">{{ c.course }}{% if c.preferred_name %} · goes by {{ c.preferred_name }}{% endif %}</div>
+    <div class="stu-course">{{ c.course }}</div>
+    <div class="goes-row">
+      <span class="goes-label">Goes by</span>
+      <input type="text" class="goes-input" value="{{ c.preferred_name }}" placeholder="Nickname" autocomplete="off" data-save-url="{{ c.note_url }}">
+    </div>
+    <div class="notes-status"></div>
     <div class="stu-h">Labels</div>
     {% if c.labels %}
       <div class="chips">{% for l in c.labels %}<span class="chip" style="background: {{ l.color }}">{{ l.name }}</span>{% endfor %}</div>
@@ -47,6 +56,9 @@
 <script>
   document.querySelectorAll('.notes-textarea').forEach(function (ta) {
     attachNoteAutosave(ta, ta.nextElementSibling, ta.dataset.saveUrl);
+  });
+  document.querySelectorAll('.goes-input').forEach(function (inp) {
+    attachNoteAutosave(inp, inp.parentNode.nextElementSibling, inp.dataset.saveUrl, 'preferred_name');
   });
 </script>
 </body>

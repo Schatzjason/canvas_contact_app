@@ -111,7 +111,10 @@
   .stu + .stu { border-top: 1px solid var(--border-strong); }
   .stu-name { font-size: 15px; font-weight: 600; color: var(--text-primary); text-decoration: none; }
   a.stu-name:hover { color: var(--accent); text-decoration: underline; }
-  .stu-goes { font-family: var(--mono); font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+  .goes-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .goes-label { font-family: var(--mono); font-size: 11px; color: var(--text-tertiary); flex-shrink: 0; }
+  .goes-input { font-family: var(--sans); font-size: 13px; color: var(--text-primary); border: 1px solid var(--border-strong); border-radius: 4px; padding: 3px 8px; width: 100%; min-width: 0; background: var(--surface); outline: none; }
+  .goes-input:focus { border-color: #3b6fd4; }
   .stu-h { font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); margin: 14px 0 6px; }
   .chips { display: flex; flex-wrap: wrap; gap: 5px; }
   .chip { font-family: var(--mono); font-size: 11px; color: #fff; padding: 2px 8px; border-radius: 10px; }
@@ -277,6 +280,16 @@
     threadEl.scrollTop = 0;
   }
 
+  // Same rule as the server: nickname if set, else first name — read live from
+  // the student panel so a nickname just typed there is used right away.
+  function greetingFor(conv) {
+    var names = conv.students.map(function (s) {
+      return s.preferred_name.trim() || s.name.split(' ')[0];
+    });
+    if (names.length <= 2) return names.join(' and ');
+    return names.slice(0, -1).join(', ') + ', and ' + names[names.length - 1];
+  }
+
   function openComposer(conv, head) {
     var existing = threadEl.querySelector('.composer');
     if (existing) { existing.querySelector('textarea').focus(); return; }
@@ -285,7 +298,8 @@
     var who = conv.students.map(function (s) { return s.name; }).join(', ');
     box.appendChild(el('div', 'composer-label', 'Replying to ' + (who || 'this conversation')));
     var ta = el('textarea');
-    ta.value = conv.greeting ? 'Hi ' + conv.greeting + ', ' : '';
+    var greeting = greetingFor(conv);
+    ta.value = greeting ? 'Hi ' + greeting + ', ' : '';
     box.appendChild(ta);
     var err = el('div', 'composer-error');
     box.appendChild(err);
@@ -311,7 +325,8 @@
       opt.appendChild(el('span', 'tpl-opt-body', t.body));
       opt.addEventListener('click', function () {
         // <name> is filled now so you can see it; <time> is filled on send.
-        ta.value = conv.greeting ? t.body.split('<name>').join(conv.greeting) : t.body;
+        var g = greetingFor(conv);
+        ta.value = g ? t.body.split('<name>').join(g) : t.body;
         wrap.classList.add('picked');
         ta.focus();
       });
@@ -368,7 +383,20 @@
       var name = el('a', 'stu-name', s.name);
       name.href = s.url;
       box.appendChild(name);
-      if (s.preferred_name) box.appendChild(el('div', 'stu-goes', 'Goes by ' + s.preferred_name));
+      var goes = el('div', 'goes-row');
+      goes.appendChild(el('span', 'goes-label', 'Goes by'));
+      var nick = el('input', 'goes-input');
+      nick.type = 'text';
+      nick.value = s.preferred_name;
+      nick.placeholder = 'Nickname';
+      nick.autocomplete = 'off';
+      nick.addEventListener('input', function () { s.preferred_name = nick.value; });
+      goes.appendChild(nick);
+      box.appendChild(goes);
+      var nickStatus = el('div', 'notes-status');
+      nickStatus.style.margin = '3px 0 0';
+      box.appendChild(nickStatus);
+      noteSavers.push(attachNoteAutosave(nick, nickStatus, s.note_url, 'preferred_name'));
       box.appendChild(el('div', 'stu-h', 'Labels'));
       if (s.labels.length) {
         var chips = el('div', 'chips');
