@@ -1567,6 +1567,7 @@ def api_inbox_conversation(conversation_id):
         'id': conv['id'],
         'subject': conv.get('subject') or '(no subject)',
         'course_name': conv.get('context_name') or '',
+        'starred': bool(conv.get('starred')),
         'messages': [{
             'id': m['id'],
             'author': names.get(m.get('author_id'), 'Unknown'),
@@ -1578,6 +1579,19 @@ def api_inbox_conversation(conversation_id):
         'students': students,
         'greeting': _join_names(_inbox_greeting_names(course_id, records)),
     }}
+
+
+@bp.route('/api/inbox/<int:conversation_id>/star', methods=['POST'])
+def api_inbox_star(conversation_id):
+    """Set the conversation's Canvas star; the page reverts its optimistic
+    toggle if this fails."""
+    starred = bool((request.get_json(silent=True) or {}).get('starred'))
+    try:
+        CanvasClient().set_starred(conversation_id, starred)
+    except Exception as exc:
+        current_app.logger.warning('Star toggle failed for %s: %s', conversation_id, exc)
+        return {'ok': False, 'error': str(exc)}, 502
+    return {'ok': True, 'starred': starred}
 
 
 @bp.route('/api/inbox/<int:conversation_id>/reply', methods=['POST'])

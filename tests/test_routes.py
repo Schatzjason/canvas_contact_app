@@ -1559,3 +1559,44 @@ def test_outlook_panel_shows_editable_nickname(client):
     with patch('app.routes.dashboard.CanvasClient', return_value=_outlook_mock()):
         html = client.get('/outlook-panel?email=ann@mail.ccsf.edu').data.decode()
     assert 'class="goes-input" value="Annie"' in html
+
+
+def test_api_inbox_conversation_includes_starred(client):
+    mock = _reply_conv_mock()
+    mock.get_conversation_live.return_value['starred'] = True
+    with patch('app.routes.dashboard.CanvasClient', return_value=mock):
+        conv = client.get('/api/inbox/7').get_json()['conversation']
+    assert conv['starred'] is True
+
+
+def test_inbox_star_sets_canvas_star(client):
+    mock = _mock_client()
+    with patch('app.routes.dashboard.CanvasClient', return_value=mock):
+        resp = client.post('/api/inbox/7/star', json={'starred': True})
+    assert resp.get_json() == {'ok': True, 'starred': True}
+    mock.set_starred.assert_called_once_with(7, True)
+
+
+def test_inbox_star_can_unstar(client):
+    mock = _mock_client()
+    with patch('app.routes.dashboard.CanvasClient', return_value=mock):
+        resp = client.post('/api/inbox/7/star', json={'starred': False})
+    assert resp.get_json()['starred'] is False
+    mock.set_starred.assert_called_once_with(7, False)
+
+
+def test_inbox_star_reports_canvas_failure(client):
+    mock = _mock_client()
+    mock.set_starred.side_effect = RuntimeError('403')
+    with patch('app.routes.dashboard.CanvasClient', return_value=mock):
+        resp = client.post('/api/inbox/7/star', json={'starred': True})
+    assert resp.status_code == 502
+    assert resp.get_json()['ok'] is False
+
+
+def test_canvas_client_set_starred_puts_form_field():
+    from app.services.canvas_client import CanvasClient as RealClient
+    with patch('app.services.canvas_client.requests.put') as put:
+        RealClient(token='t').set_starred(7, True)
+    assert put.call_args.args[0].endswith('/api/v1/conversations/7')
+    assert put.call_args.kwargs['data'] == {'conversation[starred]': 'true'}

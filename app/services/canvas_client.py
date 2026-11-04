@@ -201,6 +201,17 @@ class CanvasClient:
         resp.raise_for_status()
         return resp.json()
 
+    def set_starred(self, conversation_id, starred):
+        """Star or unstar a conversation in Canvas (per-user there)."""
+        resp = requests.put(
+            f'{self.base_url}/api/v1/conversations/{conversation_id}',
+            headers=self._auth_headers(),
+            data={'conversation[starred]': 'true' if starred else 'false'},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     def get_inbox_page(self, scope='inbox', per_page=100):
         """Newest `per_page` conversation summaries for a scope ('inbox' or
         'sent'), always live — the inbox page shows unread state, which a

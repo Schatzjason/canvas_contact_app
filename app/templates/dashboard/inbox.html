@@ -54,7 +54,7 @@
   }
   .list-filter { flex: 1; min-width: 0; font-family: var(--sans); font-size: 13px; padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text-primary); outline: none; }
   .list-filter:focus { border-color: #3b6fd4; box-shadow: 0 0 0 3px rgba(59, 111, 212, 0.12); }
-  .conv { display: grid; grid-template-columns: 14px 1fr auto; column-gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .conv { position: relative; display: grid; grid-template-columns: 14px 1fr auto; column-gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--border); cursor: pointer; }
   .conv:hover { background: #fafaf8; }
   .conv.selected { background: var(--selected); }
   .dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; }
@@ -65,7 +65,11 @@
   .conv-subject { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
   .conv-preview { font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
   .conv-meta { text-align: right; font-family: var(--mono); font-size: 11px; color: var(--text-tertiary); }
-  .conv-star { color: #d9a400; }
+  .conv-star { position: absolute; left: 0; width: 38px; text-align: center; top: 12px; font-size: 11px; line-height: 20px; color: var(--accent); }
+  .conv.unread .conv-star { width: 14px; }  /* keep clear of the unread dot */
+  .btn-star { font-size: 18px; line-height: 1; padding: 4px 8px; border: none; background: none; color: var(--text-primary); opacity: 0.15; cursor: pointer; margin-left: auto; }
+  .btn-star:hover { opacity: 0.4; }
+  .btn-star.on, .btn-star.on:hover { color: var(--accent); opacity: 1; }
   .badge { display: inline-block; min-width: 18px; padding: 1px 5px; margin-top: 4px; border-radius: 4px; background: #2b3a4a; color: #fff; font-size: 11px; text-align: center; }
 
   /* thread */
@@ -208,6 +212,7 @@
     convs.forEach(function (c) {
       var row = el('div', 'conv' + (c.unread ? ' unread' : '') + (c.id === selectedId ? ' selected' : ''));
       row.dataset.id = c.id;
+      if (c.starred) row.appendChild(el('span', 'conv-star', '★'));
       row.appendChild(el('span', 'dot'));
       var main = el('div', 'conv-main');
       main.appendChild(el('div', 'conv-names', c.names.join(', ')));
@@ -217,7 +222,6 @@
       var meta = el('div', 'conv-meta');
       meta.appendChild(el('div', '', fmtDate(c.last_message_at)));
       meta.appendChild(el('span', 'badge', String(c.message_count)));
-      if (c.starred) meta.appendChild(el('span', 'conv-star', ' ★'));
       row.appendChild(meta);
       row.addEventListener('click', function () { openConversation(c.id, row); });
       listEl.appendChild(row);
@@ -252,6 +256,11 @@
     titles.appendChild(el('h1', '', conv.subject));
     titles.appendChild(el('div', 'thread-course', conv.course_name));
     head.appendChild(titles);
+    var star = el('button', 'btn-star' + (conv.starred ? ' on' : ''), '★');
+    star.type = 'button';
+    star.title = 'Star this conversation';
+    star.addEventListener('click', function () { toggleStar(conv, star); });
+    head.appendChild(star);
     var reply = el('button', 'btn-reply', 'Reply');
     reply.type = 'button';
     reply.addEventListener('click', function () { openComposer(conv, head); });
@@ -419,6 +428,29 @@
       studentEl.appendChild(box);
       noteSavers.push(attachNoteAutosave(ta, status, s.note_url));  // after append so sizing works
     });
+  }
+
+  // Optimistic: flip the star and the list entry now, put both back if
+  // Canvas rejects the change.
+  function setStarUi(conv, btn, on) {
+    conv.starred = on;
+    btn.classList.toggle('on', on);
+    allConvs.forEach(function (c) { if (c.id === conv.id) c.starred = on; });
+    renderList();
+  }
+
+  function toggleStar(conv, btn) {
+    var want = !conv.starred;
+    setStarUi(conv, btn, want);
+    fetch('/api/inbox/' + conv.id + '/star', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({starred: want}),
+    }).then(function (r) {
+      return r.json().catch(function () { return {ok: false}; });
+    }).then(function (data) {
+      if (!data.ok) setStarUi(conv, btn, !want);
+    }).catch(function () { setStarUi(conv, btn, !want); });
   }
 
   function openConversation(id, row) {
