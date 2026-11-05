@@ -1460,6 +1460,13 @@ def delete_message_template(template_id):
     return {'ok': True}
 
 
+# ── Tools ────────────────────────────────────────────────────────────────
+
+@bp.route('/tools/discussion-helper')
+def discussion_helper():
+    return render_template('dashboard/discussion_helper.html')
+
+
 # ── Inbox ────────────────────────────────────────────────────────────────
 
 INBOX_SCOPES = ('inbox', 'sent')

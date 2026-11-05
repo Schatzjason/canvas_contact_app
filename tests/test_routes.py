@@ -1600,3 +1600,17 @@ def test_canvas_client_set_starred_puts_form_field():
         RealClient(token='t').set_starred(7, True)
     assert put.call_args.args[0].endswith('/api/v1/conversations/7')
     assert put.call_args.kwargs['data'] == {'conversation[starred]': 'true'}
+
+
+# ── Tools menu / Discussion Helper ───────────────────────────────────────
+
+def test_discussion_helper_page_renders(client):
+    resp = client.get('/tools/discussion-helper')
+    assert resp.status_code == 200
+    assert b'Discussion Helper' in resp.data
+
+
+def test_nav_has_tools_menu_linking_to_discussion_helper(client):
+    html = client.get('/inbox').data.decode()
+    assert 'class="nav-tools"' in html
+    assert 'href="/tools/discussion-helper"' in html
