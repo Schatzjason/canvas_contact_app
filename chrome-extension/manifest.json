@@ -3,6 +3,12 @@
   "name": "Contact Tracker Link",
   "version": "0.2.0",
   "description": "Right-click a student's name in Canvas to open their page in the local Canvas Contact Tracker app, and show the student's notes beside the open email in Outlook on the web.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "permissions": [
     "contextMenus",
     "tabs",
@@ -34,7 +40,13 @@
   ],
   "options_page": "options.html",
   "action": {
-    "default_title": "Student notes (Outlook)"
+    "default_title": "Student notes (Outlook)",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
   "side_panel": {
     "default_path": "sidepanel.html"
