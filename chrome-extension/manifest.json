@@ -29,6 +29,14 @@
     },
     {
       "matches": [
+        "https://ccsf.instructure.com/courses/*/discussion_topics/*"
+      ],
+      "js": [
+        "content-discussion.js"
+      ]
+    },
+    {
+      "matches": [
         "https://outlook.cloud.microsoft/*",
         "https://outlook.office.com/*",
         "https://outlook.office365.com/*"
@@ -50,5 +58,9 @@
   },
   "side_panel": {
     "default_path": "sidepanel.html"
-  }
+  },
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ]
 }

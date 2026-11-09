@@ -372,6 +372,31 @@ class CanvasClient:
             refresh=refresh,
         )
 
+    def get_discussion_topic(self, course_id, topic_id):
+        """One discussion topic (live)."""
+        return self._get(f'/api/v1/courses/{course_id}/discussion_topics/{topic_id}')
+
+    def get_discussion_entry(self, course_id, topic_id, entry_id):
+        """One discussion entry (top-level or reply), or None if Canvas has no
+        such entry. Canvas only serves single entries through entry_list."""
+        entries = self._get(
+            f'/api/v1/courses/{course_id}/discussion_topics/{topic_id}/entry_list',
+            params={'ids[]': entry_id},
+        )
+        return entries[0] if entries else None
+
+    def post_discussion_entry(self, course_id, topic_id, message):
+        """Post a new top-level entry (HTML message) to a discussion topic as
+        the authenticated user. Returns the created entry."""
+        resp = requests.post(
+            f'{self.base_url}/api/v1/courses/{course_id}/discussion_topics/{topic_id}/entries',
+            headers=self._auth_headers(),
+            data={'message': message},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     def get_discussion_entries(self, course_id, topic_id, refresh=False):
         """All entries for a discussion topic, including recent_replies (cached 15 min)."""
         return self._get_all_pages(

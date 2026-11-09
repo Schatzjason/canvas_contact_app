@@ -115,3 +115,23 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.runtime.onStartup.addListener(() => {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
 });
+
+// Content scripts can't POST to the local app directly (Canvas-origin page ->
+// http://127.0.0.1 is cross-origin); the service worker can, via host_permissions.
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg || msg.type !== 'saveDiscussionPost') return false;
+  (async () => {
+    try {
+      const settings = await getSettings();
+      const resp = await fetch(`${settings.baseUrl}/api/discussion-posts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(msg.payload),
+      });
+      sendResponse(await resp.json().catch(() => ({ ok: false, error: `HTTP ${resp.status}` })));
+    } catch (e) {
+      sendResponse({ ok: false, error: 'app not reachable' });
+    }
+  })();
+  return true;  // keep the channel open for the async response
+});

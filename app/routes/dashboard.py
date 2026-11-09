@@ -1,5 +1,7 @@
 import json
 import re
+from html.parser import HTMLParser
+from urllib.parse import parse_qs, urlparse
 import uuid
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -12,12 +14,15 @@ from flask import redirect, request, url_for
 
 from app import db
 from app.models.canvas_cache import CanvasCache
+from app.models.course_catalog import CanvasModuleLink
 from app.models.check_back_date import CheckBackDate
 from app.models.course_display_name import CourseDisplayName
 from app.models.interaction_event import InteractionEvent
 from app.models.label import Label
 from app.models.message_template import MessageTemplate
 from app.models.pinned_discussion import PinnedDiscussion
+from app.models.saved_discussion_post import SavedDiscussionPost
+from app.services.course_catalog import module_name_for_canvas_module
 from app.models.student_label import StudentLabel
 from app.models.student_note import StudentNote
 from app.models.student_record import StudentRecord
@@ -1462,9 +1467,237 @@ def delete_message_template(template_id):
 
 # ── Tools ────────────────────────────────────────────────────────────────
 
+class _TextExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.parts = []
+
+    def handle_data(self, data):
+        self.parts.append(data)
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ('p', 'br', 'li', 'div', 'h1', 'h2', 'h3', 'h4'):
+            self.parts.append('\n')
+
+
+def _html_to_text(html):
+    """Plain text of a Canvas post body, for listing it without rendering
+    stored HTML."""
+    parser = _TextExtractor()
+    parser.feed(html or '')
+    return re.sub(r'\n\s*\n+', '\n\n', ''.join(parser.parts)).strip()
+
+
+def _module_for_topic(course_id, topic_id):
+    """(canvas module dict, linked ModuleName or None) for the module holding a
+    discussion topic; (None, None) if it isn't in one or modules can't be
+    fetched — saving a post shouldn't fail on that."""
+    try:
+        modules = CanvasClient().get_modules(course_id)
+    except Exception as exc:
+        current_app.logger.warning('Module lookup failed for course %s: %s', course_id, exc)
+        return None, None
+    for module in modules:
+        for item in module.get('items') or []:
+            if item.get('type') == 'Discussion' and item.get('content_id') == topic_id:
+                return module, module_name_for_canvas_module(course_id, module.get('id'))
+    return None, None
+
+
 @bp.route('/tools/discussion-helper')
 def discussion_helper():
-    return render_template('dashboard/discussion_helper.html')
+    posts = SavedDiscussionPost.query.order_by(SavedDiscussionPost.saved_at.desc()).all()
+    return render_template('dashboard/discussion_helper.html',
+                           posts=[_saved_post_json(p) for p in posts])
+
+
+def _upsert_saved_post(course_id, topic_id, entry_id, body, board_name):
+    """Create or update the saved copy of a Canvas entry; (created, post)."""
+    post = SavedDiscussionPost.query.filter_by(course_id=course_id, entry_id=entry_id).first()
+    created = post is None
+    if created:
+        post = SavedDiscussionPost(course_id=course_id, entry_id=entry_id)
+        db.session.add(post)
+    post.topic_id = topic_id
+    post.body = body
+    post.board_name = board_name
+    module, linked = _module_for_topic(course_id, topic_id)
+    post.module_name = module.get('name') if module else None
+    post.module_name_id = linked.id if linked else None
+    post.saved_at = datetime.now(timezone.utc)
+    db.session.commit()
+    return created, post
+
+
+def _saved_post_json(post):
+    return {
+        'entry_id': post.entry_id,
+        'board_name': post.board_name,
+        'module_name': post.module.name if post.module else post.module_name,
+        'text': _html_to_text(post.body),
+    }
+
+
+@bp.route('/api/discussion-posts', methods=['POST'])
+def api_save_discussion_post():
+    """Called by the Chrome extension's "Save to Discussion Helper" link.
+    Saving the same Canvas entry again updates the stored copy."""
+    data = request.get_json(silent=True) or {}
+    try:
+        course_id = int(data['course_id'])
+        topic_id = int(data['topic_id'])
+        entry_id = int(data['entry_id'])
+    except (KeyError, TypeError, ValueError):
+        return {'ok': False, 'error': 'course_id, topic_id and entry_id are required.'}, 400
+    body = (data.get('body') or '').strip()
+    if not body:
+        return {'ok': False, 'error': 'Post body is empty.'}, 400
+
+    created, _post = _upsert_saved_post(
+        course_id, topic_id, entry_id, body, (data.get('board_name') or '').strip())
+    return {'ok': True, 'created': created}
+
+
+@bp.route('/api/discussion-posts/<int:entry_id>', methods=['DELETE'])
+def api_delete_discussion_post(entry_id):
+    """Delete a saved post (Canvas entry ids are unique, so entry_id is enough)."""
+    deleted = SavedDiscussionPost.query.filter_by(entry_id=entry_id).delete()
+    db.session.commit()
+    if not deleted:
+        return {'ok': False, 'error': 'No such saved post.'}, 404
+    return {'ok': True}
+
+
+@bp.route('/api/discussion-posts/<int:entry_id>/classes')
+def api_discussion_post_classes(entry_id):
+    """Current classes a saved post could be posted to (every active course
+    except the one it was saved from)."""
+    post = SavedDiscussionPost.query.filter_by(entry_id=entry_id).first()
+    if post is None:
+        return {'ok': False, 'error': 'No such saved post.'}, 404
+    try:
+        courses = CanvasClient().get_courses()
+    except Exception as exc:
+        current_app.logger.warning('Could not list courses: %s', exc)
+        return {'ok': False, 'error': 'Could not load classes from Canvas.'}, 502
+    classes = [
+        {'course_id': c['id'], 'name': c.get('name') or c.get('course_code') or str(c['id'])}
+        for c in courses if c['id'] != post.course_id
+    ]
+    return {'ok': True, 'classes': classes}
+
+
+def _find_target_topic(client, course_id, post):
+    """(topic, error): the discussion board in `course_id` with the post's board
+    name. If several share the name, prefer the one in the post's module."""
+    wanted = (post.board_name or '').strip().lower()
+    if not wanted:
+        return None, 'The saved post has no discussion board name.'
+    topics = [t for t in client.get_discussion_topics(course_id, refresh=True)
+              if (t.get('title') or '').strip().lower() == wanted]
+    if not topics:
+        return None, f'No discussion board named "{post.board_name}" in this course.'
+    if len(topics) > 1 and post.module_name_id:
+        wanted_modules = {
+            l.canvas_module_id for l in CanvasModuleLink.query.filter_by(
+                canvas_course_id=course_id, module_name_id=post.module_name_id)}
+        in_module = {
+            item.get('content_id')
+            for m in client.get_modules(course_id) if m.get('id') in wanted_modules
+            for item in m.get('items') or [] if item.get('type') == 'Discussion'}
+        narrowed = [t for t in topics if t['id'] in in_module]
+        if narrowed:
+            topics = narrowed
+    if len(topics) > 1:
+        return None, f'{len(topics)} discussion boards are named "{post.board_name}"; not sure which to use.'
+    return topics[0], None
+
+
+@bp.route('/api/discussion-posts/<int:entry_id>/publish', methods=['POST'])
+def api_publish_discussion_post(entry_id):
+    """Post a saved post as a new top-level entry in each selected course.
+    Each course succeeds or fails on its own; returns a per-course result
+    with a link to the new entry for checking."""
+    post = SavedDiscussionPost.query.filter_by(entry_id=entry_id).first()
+    if post is None:
+        return {'ok': False, 'error': 'No such saved post.'}, 404
+    data = request.get_json(silent=True) or {}
+    try:
+        course_ids = [int(c) for c in data.get('course_ids') or []]
+    except (TypeError, ValueError):
+        return {'ok': False, 'error': 'course_ids must be numbers.'}, 400
+    course_ids = list(dict.fromkeys(course_ids))
+    if not course_ids:
+        return {'ok': False, 'error': 'Pick at least one class.'}, 400
+    if post.course_id in course_ids:
+        return {'ok': False, 'error': 'That post came from one of the selected classes.'}, 400
+
+    client = CanvasClient()
+    base = (current_app.config.get('CANVAS_BASE_URL') or '').rstrip('/')
+    results = []
+    for course_id in course_ids:
+        result = {'course_id': course_id, 'name': str(course_id)}
+        try:
+            result['name'] = client.get_course(course_id).get('name') or result['name']
+            topic, error = _find_target_topic(client, course_id, post)
+            if error:
+                result.update(ok=False, error=error)
+            else:
+                entry = client.post_discussion_entry(course_id, topic['id'], post.body)
+                result.update(
+                    ok=True, board=topic.get('title'),
+                    url=f"{base}/courses/{course_id}/discussion_topics/{topic['id']}?entry_id={entry['id']}")
+        except Exception as exc:
+            current_app.logger.warning('Posting to course %s failed: %s', course_id, exc)
+            result.update(ok=False, error='Canvas rejected the post or could not be reached.')
+        results.append(result)
+    return {'ok': True, 'results': results}
+
+
+_TOPIC_URL_PATH = re.compile(r'^/courses/(\d+)/discussion_topics/(\d+)/?$')
+
+
+def _parse_discussion_url(raw):
+    """(course_id, topic_id, entry_id) from a Canvas discussion entry URL like
+    https://ccsf.instructure.com/courses/1/discussion_topics/2?entry_id=3,
+    or None if it isn't one on this app's Canvas host."""
+    try:
+        url = urlparse((raw or '').strip())
+        host = urlparse(current_app.config.get('CANVAS_BASE_URL') or '').hostname
+        m = _TOPIC_URL_PATH.match(url.path)
+        entry = parse_qs(url.query).get('entry_id', [''])[0]
+        if url.scheme not in ('http', 'https') or not m or not entry.isdigit():
+            return None
+        if host and url.hostname != host:
+            return None
+        return int(m.group(1)), int(m.group(2)), int(entry)
+    except ValueError:
+        return None
+
+
+@bp.route('/api/discussion-posts/by-url', methods=['POST'])
+def api_save_discussion_post_by_url():
+    """Save a discussion entry given its Canvas URL: the course, topic and
+    entry ids come from the URL; the entry body and topic title are fetched."""
+    ids = _parse_discussion_url((request.get_json(silent=True) or {}).get('url'))
+    if not ids:
+        return {'ok': False, 'error': 'Enter a Canvas discussion URL that includes ?entry_id=…, '
+                'like https://…/courses/123/discussion_topics/456?entry_id=789'}, 400
+    course_id, topic_id, entry_id = ids
+
+    try:
+        client = CanvasClient()
+        entry = client.get_discussion_entry(course_id, topic_id, entry_id)
+        title = (client.get_discussion_topic(course_id, topic_id).get('title') or '') if entry else ''
+    except Exception as exc:
+        current_app.logger.warning('Save by URL: Canvas fetch failed: %s', exc)
+        return {'ok': False, 'error': f'Could not fetch that post from Canvas: {exc}'}, 502
+    body = ((entry or {}).get('message') or '').strip()
+    if not body:
+        return {'ok': False, 'error': 'Canvas has no post with that entry_id in this discussion.'}, 404
+
+    created, post = _upsert_saved_post(course_id, topic_id, entry_id, body, title.strip())
+    return {'ok': True, 'created': created, 'post': _saved_post_json(post)}
 
 
 # ── Inbox ────────────────────────────────────────────────────────────────

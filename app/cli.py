@@ -7,6 +7,24 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 def register_commands(app):
 
+    @app.cli.command('link-course')
+    @click.argument('canvas_course_id', type=int)
+    @click.argument('course_name')
+    @click.option('--create-modules', is_flag=True,
+                  help='Add this course\'s module titles as the canonical module names.')
+    def link_course(canvas_course_id, course_name, create_modules):
+        """Link a Canvas course to a recurring course name (e.g. CS111B) and
+        match its modules to that course's module names."""
+        from app.services.canvas_client import CanvasClient
+        from app.services.course_catalog import link_canvas_course
+
+        modules = CanvasClient().get_modules(canvas_course_id)
+        result = link_canvas_course(canvas_course_id, course_name, modules,
+                                    create_missing=create_modules)
+        click.echo(f"matched {len(result['matched'])}, created {len(result['created'])}")
+        for title in result['unmatched']:
+            click.echo(f'  unmatched: {title}')
+
     @app.cli.command('backfill-student-records')
     def backfill_student_records():
         """One-time backfill: create StudentRecord rows for all students.

@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Discussion Helper — Canvas Tracker{% endblock %}
 
+{% block favicon %}{{ url_for('static', filename='favicon-discussion-helper.svg') }}{% endblock %}
+
 {% block nav %}
 <nav class="app-nav">
   <div class="nav-left">
@@ -48,20 +50,308 @@
 
   .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 32px; text-align: center; }
   .panel-tag { display: inline-block; font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-ink); background: var(--accent-soft); border: 1px solid var(--accent); padding: 2px 8px; border-radius: 3px; margin-bottom: 14px; }
+  .post { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 16px 20px; margin-bottom: 14px; }
+  .post { position: relative; }
+  .post-delete { position: absolute; top: 8px; right: 10px; border: 0; background: none; color: var(--text-tertiary); font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 4px; }
+  .post-delete:hover { color: #c0392b; background: rgba(192,57,43,0.1); }
+  .post-actions { margin-top: 12px; }
+  .btn-small { font-size: 12px; padding: 4px 12px; }
+  .class-list { max-height: 260px; overflow-y: auto; margin: 4px 0 8px; }
+  .class-row { display: flex; gap: 8px; align-items: center; padding: 6px 4px; font-size: 14px; cursor: pointer; }
+  .result-row { padding: 6px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
+  .result-row a { color: inherit; word-break: break-all; }
+  .result-bad { color: #c0392b; }
+  .post-meta { display: flex; gap: 10px; align-items: baseline; margin-bottom: 8px; }
+  .post-board { font-size: 14px; font-weight: 600; }
+  .post-module { font-family: var(--mono); font-size: 11px; color: var(--text-tertiary); letter-spacing: 0.04em; }
+  .post-text { font-size: 14px; line-height: 1.6; white-space: pre-wrap; color: var(--text-primary); }
+  .page-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .btn { font-family: var(--sans); font-size: 13px; font-weight: 500; padding: 7px 16px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text-primary); cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #1a1915; }
+  .btn-primary:hover { filter: brightness(0.95); }
+  .btn:disabled { opacity: 0.6; cursor: default; }
+  .modal-back { position: fixed; inset: 0; background: rgba(26, 25, 21, 0.45); display: none; align-items: center; justify-content: center; z-index: 2000; }
+  .modal-back.open { display: flex; }
+  .modal { width: 520px; max-width: calc(100vw - 32px); background: var(--surface); border-radius: 8px; padding: 24px; box-shadow: 0 12px 40px rgba(0,0,0,0.25); }
+  .modal h2 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+  .modal p { font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; }
+  .modal textarea { width: 100%; min-height: 84px; resize: vertical; font-family: var(--mono); font-size: 12px; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: 6px; outline: none; }
+  .modal textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(244, 180, 0, 0.2); }
+  .modal-error { color: #c0392b; font-size: 13px; margin-top: 8px; min-height: 18px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
   .panel h2 { font-size: 16px; font-weight: 500; }
   .panel p { font-size: 13px; color: var(--text-secondary); margin-top: 6px; line-height: 1.6; }
 {% endblock %}
 
 {% block content %}
 <div class="page">
-  <div class="page-head">
-    <h1>Discussion Helper</h1>
-    <p>Save discussion posts you like and reuse them in other courses.</p>
+  <div class="page-top">
+    <div class="page-head">
+      <h1>Discussion Helper</h1>
+      <p>Save discussion posts you like and reuse them in other courses.</p>
+    </div>
+    <button type="button" class="btn" id="save-by-url-btn">save by url</button>
   </div>
-  <div class="panel">
-    <span class="panel-tag">Coming soon</span>
+  <div id="posts">
+  {% if not posts %}
+  <div class="panel" id="empty-panel">
+    <span class="panel-tag">Nothing saved</span>
     <h2>No saved posts yet</h2>
-    <p>This is a placeholder. Saved posts will be listed here, with a way to post them to another course's discussion.</p>
+    <p>On a Canvas discussion page, use "Save to Discussion Helper" under one of your posts.</p>
+  </div>
+  {% endif %}
+  {% for p in posts %}
+  <article class="post" data-entry-id="{{ p.entry_id }}">
+    <button type="button" class="post-delete" title="Delete this saved post" aria-label="Delete saved post">&times;</button>
+    <div class="post-meta">
+      <span class="post-board">{{ p.board_name or 'Untitled discussion' }}</span>
+      {% if p.module_name %}<span class="post-module">{{ p.module_name }}</span>{% endif %}
+    </div>
+    <div class="post-text">{{ p.text }}</div>
+    <div class="post-actions"><button type="button" class="btn btn-small post-publish">Post to a class…</button></div>
+  </article>
+  {% endfor %}
   </div>
 </div>
+
+<div class="modal-back" id="url-modal" role="dialog" aria-modal="true" aria-labelledby="url-modal-title">
+  <div class="modal">
+    <h2 id="url-modal-title">Save a post by URL</h2>
+    <p>Paste the Canvas link to a discussion post, including <code>?entry_id=…</code>.</p>
+    <textarea id="url-input" placeholder="https://ccsf.instructure.com/courses/73658/discussion_topics/1568002?entry_id=10344514" spellcheck="false"></textarea>
+    <div class="modal-error" id="url-error"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn" id="url-cancel">Cancel</button>
+      <button type="button" class="btn btn-primary" id="url-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-back" id="pub-modal" role="dialog" aria-modal="true" aria-labelledby="pub-title">
+  <div class="modal">
+    <h2 id="pub-title">Post to a class</h2>
+    <p id="pub-sub"></p>
+    <div id="pub-body"></div>
+    <div class="modal-error" id="pub-error"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn" id="pub-cancel">Cancel</button>
+      <button type="button" class="btn btn-primary" id="pub-go" disabled>Post</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var modal = document.getElementById('url-modal');
+  var input = document.getElementById('url-input');
+  var errorEl = document.getElementById('url-error');
+  var saveBtn = document.getElementById('url-save');
+  var postsEl = document.getElementById('posts');
+
+  function openModal() {
+    input.value = '';
+    errorEl.textContent = '';
+    modal.classList.add('open');
+    input.focus();
+  }
+  function closeModal() { modal.classList.remove('open'); }
+
+  function card(p) {
+    var art = document.createElement('article');
+    art.className = 'post';
+    art.dataset.entryId = p.entry_id;
+    var del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'post-delete';
+    del.title = 'Delete this saved post';
+    del.setAttribute('aria-label', 'Delete saved post');
+    del.textContent = '\u00d7';
+    art.appendChild(del);
+    var meta = document.createElement('div');
+    meta.className = 'post-meta';
+    var board = document.createElement('span');
+    board.className = 'post-board';
+    board.textContent = p.board_name || 'Untitled discussion';
+    meta.appendChild(board);
+    if (p.module_name) {
+      var mod = document.createElement('span');
+      mod.className = 'post-module';
+      mod.textContent = p.module_name;
+      meta.appendChild(mod);
+    }
+    var text = document.createElement('div');
+    text.className = 'post-text';
+    text.textContent = p.text;
+    art.appendChild(meta);
+    art.appendChild(text);
+    var actions = document.createElement('div');
+    actions.className = 'post-actions';
+    var pub = document.createElement('button');
+    pub.type = 'button';
+    pub.className = 'btn btn-small post-publish';
+    pub.textContent = 'Post to a class\u2026';
+    actions.appendChild(pub);
+    art.appendChild(actions);
+    return art;
+  }
+
+  function showPost(p) {
+    var empty = document.getElementById('empty-panel');
+    if (empty) empty.remove();
+    var existing = postsEl.querySelector('.post[data-entry-id="' + p.entry_id + '"]');
+    if (existing) existing.remove();
+    postsEl.insertBefore(card(p), postsEl.firstChild);  // newest first
+  }
+
+  function save() {
+    errorEl.textContent = '';
+    saveBtn.disabled = true;
+    fetch('/api/discussion-posts/by-url', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({url: input.value}),
+    }).then(function (r) {
+      return r.json().catch(function () { return {ok: false, error: 'Unexpected response.'}; });
+    }).then(function (data) {
+      saveBtn.disabled = false;
+      if (!data.ok) { errorEl.textContent = data.error || 'Could not save.'; return; }
+      showPost(data.post);
+      closeModal();
+    }).catch(function () {
+      saveBtn.disabled = false;
+      errorEl.textContent = 'Could not reach the app.';
+    });
+  }
+
+  postsEl.addEventListener('click', function (e) {
+    var btn = e.target.closest('.post-delete');
+    if (!btn) return;
+    var art = btn.closest('.post');
+    if (!window.confirm('Delete this saved post?')) return;
+    fetch('/api/discussion-posts/' + art.dataset.entryId, {method: 'DELETE'})
+      .then(function (r) { return r.json().catch(function () { return {ok: false}; }); })
+      .then(function (data) {
+        if (!data.ok) { window.alert('Could not delete the post.'); return; }
+        art.remove();
+        if (!postsEl.querySelector('.post')) window.location.reload();  // show the empty state
+      })
+      .catch(function () { window.alert('Could not reach the app.'); });
+  });
+
+  var pubModal = document.getElementById('pub-modal');
+  var pubBody = document.getElementById('pub-body');
+  var pubError = document.getElementById('pub-error');
+  var pubGo = document.getElementById('pub-go');
+  var pubCancel = document.getElementById('pub-cancel');
+  var pubEntry = null;
+  var pubDone = false;
+
+  function pubClose() { pubModal.classList.remove('open'); }
+  function pubUpdateGo() {
+    pubGo.disabled = pubDone || !pubBody.querySelector('input:checked');
+  }
+  function pubReset() {
+    pubDone = false;
+    pubBody.textContent = '';
+    pubError.textContent = '';
+    pubGo.style.display = '';
+    pubGo.disabled = true;
+    pubCancel.textContent = 'Cancel';
+  }
+
+  function pubOpen(art) {
+    pubEntry = art.dataset.entryId;
+    pubReset();
+    var board = art.querySelector('.post-board');
+    document.getElementById('pub-sub').textContent =
+      'Posts "' + (board ? board.textContent : '') + '" as a new top-level post in each class you pick.';
+    pubBody.textContent = 'Loading classes\u2026';
+    pubModal.classList.add('open');
+    fetch('/api/discussion-posts/' + pubEntry + '/classes')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        pubBody.textContent = '';
+        if (!data.ok) { pubError.textContent = data.error || 'Could not load classes.'; return; }
+        if (!data.classes.length) { pubBody.textContent = 'No other current classes found.'; return; }
+        var list = document.createElement('div');
+        list.className = 'class-list';
+        data.classes.forEach(function (c) {
+          var row = document.createElement('label');
+          row.className = 'class-row';
+          var cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.value = c.course_id;
+          cb.addEventListener('change', pubUpdateGo);
+          row.appendChild(cb);
+          row.appendChild(document.createTextNode(c.name));
+          list.appendChild(row);
+        });
+        pubBody.appendChild(list);
+      })
+      .catch(function () { pubBody.textContent = ''; pubError.textContent = 'Could not reach the app.'; });
+  }
+
+  function pubShowResults(results) {
+    pubDone = true;
+    pubBody.textContent = '';
+    results.forEach(function (r) {
+      var row = document.createElement('div');
+      row.className = 'result-row';
+      row.appendChild(document.createTextNode(r.name + ': '));
+      if (r.ok) {
+        var a = document.createElement('a');
+        a.href = r.url; a.target = '_blank'; a.rel = 'noopener';
+        a.textContent = r.url;
+        row.appendChild(a);
+      } else {
+        var span = document.createElement('span');
+        span.className = 'result-bad';
+        span.textContent = 'not posted \u2014 ' + r.error;
+        row.appendChild(span);
+      }
+      pubBody.appendChild(row);
+    });
+    pubGo.style.display = 'none';
+    pubCancel.textContent = 'Done';
+  }
+
+  function pubPost() {
+    var ids = Array.prototype.map.call(pubBody.querySelectorAll('input:checked'),
+                                       function (cb) { return Number(cb.value); });
+    pubError.textContent = '';
+    pubGo.disabled = true;
+    pubGo.textContent = 'Posting\u2026';
+    fetch('/api/discussion-posts/' + pubEntry + '/publish', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({course_ids: ids}),
+    }).then(function (r) {
+      return r.json().catch(function () { return {ok: false, error: 'Unexpected response.'}; });
+    }).then(function (data) {
+      pubGo.textContent = 'Post';
+      if (!data.ok) { pubError.textContent = data.error || 'Could not post.'; pubUpdateGo(); return; }
+      pubShowResults(data.results);
+    }).catch(function () {
+      pubGo.textContent = 'Post';
+      pubError.textContent = 'Could not reach the app.';
+      pubUpdateGo();
+    });
+  }
+
+  postsEl.addEventListener('click', function (e) {
+    var btn = e.target.closest('.post-publish');
+    if (btn) pubOpen(btn.closest('.post'));
+  });
+  pubGo.addEventListener('click', pubPost);
+  pubCancel.addEventListener('click', pubClose);
+  pubModal.addEventListener('click', function (e) { if (e.target === pubModal) pubClose(); });
+
+  document.getElementById('save-by-url-btn').addEventListener('click', openModal);
+  document.getElementById('url-cancel').addEventListener('click', closeModal);
+  saveBtn.addEventListener('click', save);
+  modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeModal(); pubClose(); } });
+})();
+</script>
 {% endblock %}

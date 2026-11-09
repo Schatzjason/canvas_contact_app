@@ -15,6 +15,7 @@ from app.models.check_back_date import CheckBackDate
 from app.models.interaction_event import InteractionEvent
 from app.models.message_template import MessageTemplate
 from app.models.pinned_discussion import PinnedDiscussion
+from app.models.saved_discussion_post import SavedDiscussionPost
 from app.models.student_note import StudentNote
 from app.models.student_record import StudentRecord
 
@@ -1614,3 +1615,260 @@ def test_nav_has_tools_menu_linking_to_discussion_helper(client):
     html = client.get('/inbox').data.decode()
     assert 'class="nav-tools"' in html
     assert 'href="/tools/discussion-helper"' in html
+
+
+def test_discussion_helper_has_its_own_favicon(client):
+    assert b'favicon-discussion-helper.svg' in client.get('/tools/discussion-helper').data
+    assert b'favicon-discussion-helper.svg' not in client.get('/inbox').data
+
+
+# ── Saved discussion posts ───────────────────────────────────────────────
+
+def _save_post(client, mock, **overrides):
+    payload = {'course_id': 5, 'topic_id': 30, 'entry_id': 900,
+               'body': '<p>Welcome to the class</p>', 'board_name': 'Introductions'}
+    payload.update(overrides)
+    with patch('app.routes.dashboard.CanvasClient', return_value=mock):
+        return client.post('/api/discussion-posts', json=payload)
+
+
+def _modules_mock():
+    mock = _mock_client()
+    mock.get_modules.return_value = [
+        {'name': 'Module 0', 'items': [{'type': 'Discussion', 'content_id': 30}]},
+        {'name': 'Module 1', 'items': [{'type': 'Assignment', 'content_id': 30}]},
+    ]
+    return mock
+
+
+def test_save_discussion_post_stores_body_board_and_module(client):
+    resp = _save_post(client, _modules_mock())
+    assert resp.get_json() == {'ok': True, 'created': True}
+    post = SavedDiscussionPost.query.one()
+    assert (post.body, post.board_name, post.module_name) == (
+        '<p>Welcome to the class</p>', 'Introductions', 'Module 0')
+
+
+def test_saving_same_entry_again_updates_it(client):
+    _save_post(client, _modules_mock())
+    resp = _save_post(client, _modules_mock(), body='<p>Edited</p>', board_name='Intros v2')
+    assert resp.get_json() == {'ok': True, 'created': False}
+    post = SavedDiscussionPost.query.one()
+    assert (post.body, post.board_name) == ('<p>Edited</p>', 'Intros v2')
+
+
+def test_save_discussion_post_survives_module_lookup_failure(client):
+    mock = _mock_client()
+    mock.get_modules.side_effect = RuntimeError('canvas down')
+    assert _save_post(client, mock).get_json()['ok'] is True
+    assert SavedDiscussionPost.query.one().module_name is None
+
+
+def test_save_discussion_post_without_module_leaves_it_blank(client):
+    mock = _mock_client()
+    mock.get_modules.return_value = []
+    _save_post(client, mock)
+    assert SavedDiscussionPost.query.one().module_name is None
+
+
+def test_save_discussion_post_validates_input(client):
+    assert _save_post(client, _modules_mock(), entry_id='abc').status_code == 400
+    assert _save_post(client, _modules_mock(), body='   ').status_code == 400
+    assert SavedDiscussionPost.query.count() == 0
+
+
+def test_discussion_helper_lists_saved_posts_as_text(client):
+    _save_post(client, _modules_mock(), body='<p>Hello <script>x()</script><b>there</b></p>')
+    html = client.get('/tools/discussion-helper').data.decode()
+    assert 'Introductions' in html and 'Module 0' in html
+    assert '<script>x()' not in html
+
+
+def _by_url_mock(entry=None, title='Introductions'):
+    mock = _modules_mock()
+    mock.get_discussion_entry.return_value = (
+        {'id': 3, 'message': '<p>Welcome to the class</p>'} if entry is None else entry)
+    mock.get_discussion_topic.return_value = {'id': 2, 'title': title}
+    return mock
+
+
+def _save_by_url(client, url, mock=None):
+    mock = mock or _by_url_mock()
+    with patch('app.routes.dashboard.CanvasClient', return_value=mock):
+        return client.post('/api/discussion-posts/by-url', json={'url': url}), mock
+
+
+BY_URL = 'https://ccsf.instructure.com/courses/1/discussion_topics/30?entry_id=3'
+
+
+def test_save_by_url_fetches_entry_and_saves_it(client):
+    resp, mock = _save_by_url(client, BY_URL)
+    data = resp.get_json()
+    assert data['ok'] is True and data['created'] is True
+    assert data['post'] == {'entry_id': 3, 'board_name': 'Introductions',
+                            'module_name': 'Module 0', 'text': 'Welcome to the class'}
+    mock.get_discussion_entry.assert_called_once_with(1, 30, 3)
+    post = SavedDiscussionPost.query.one()
+    assert (post.course_id, post.topic_id, post.entry_id) == (1, 30, 3)
+
+
+def test_save_by_url_again_updates_the_same_post(client):
+    _save_by_url(client, BY_URL)
+    resp, _ = _save_by_url(client, BY_URL, _by_url_mock({'id': 3, 'message': '<p>Edited</p>'}))
+    assert resp.get_json()['created'] is False
+    assert SavedDiscussionPost.query.one().body == '<p>Edited</p>'
+
+
+def test_save_by_url_same_post_as_extension_save_updates_it(client):
+    _save_post(client, _modules_mock(), course_id=1, topic_id=30, entry_id=3)
+    resp, _ = _save_by_url(client, BY_URL)
+    assert resp.get_json()['created'] is False
+    assert SavedDiscussionPost.query.count() == 1
+
+
+def test_save_by_url_rejects_malformed_urls(client):
+    for bad in ['', 'not a url',
+                'https://ccsf.instructure.com/courses/1/discussion_topics/30',   # no entry_id
+                'https://ccsf.instructure.com/courses/1/discussion_topics/30?entry_id=x',
+                'https://ccsf.instructure.com/courses/1/assignments/30?entry_id=3',
+                'https://evil.example.com/courses/1/discussion_topics/30?entry_id=3']:
+        resp, mock = _save_by_url(client, bad)
+        assert resp.status_code == 400, bad
+        assert resp.get_json()['ok'] is False
+        mock.get_discussion_entry.assert_not_called()
+    assert SavedDiscussionPost.query.count() == 0
+
+
+def test_save_by_url_reports_missing_entry(client):
+    mock = _by_url_mock()
+    mock.get_discussion_entry.return_value = None
+    resp, _ = _save_by_url(client, BY_URL, mock)
+    assert resp.status_code == 404
+    assert SavedDiscussionPost.query.count() == 0
+
+
+def test_save_by_url_reports_canvas_failure(client):
+    mock = _by_url_mock()
+    mock.get_discussion_entry.side_effect = RuntimeError('canvas down')
+    resp, _ = _save_by_url(client, BY_URL, mock)
+    assert resp.status_code == 502
+    assert SavedDiscussionPost.query.count() == 0
+
+
+def test_discussion_helper_page_has_save_by_url_button(client):
+    html = client.get('/tools/discussion-helper').data.decode()
+    assert 'save by url' in html and 'id="url-modal"' in html
+
+
+def test_canvas_client_get_discussion_entry_uses_entry_list():
+    from app.services.canvas_client import CanvasClient as RealClient
+    client = RealClient(token='t')
+    with patch.object(RealClient, '_get', return_value=[{'id': 3}]) as get:
+        assert client.get_discussion_entry(1, 2, 3) == {'id': 3}
+    assert get.call_args.args[0].endswith('/courses/1/discussion_topics/2/entry_list')
+    assert get.call_args.kwargs['params'] == {'ids[]': 3}
+    with patch.object(RealClient, '_get', return_value=[]):
+        assert client.get_discussion_entry(1, 2, 3) is None
+
+
+def test_saved_post_uses_linked_module_name(client):
+    from app.services.course_catalog import link_canvas_course
+    link_canvas_course(5, 'CS111B', [{'id': 7, 'name': 'Module 0: Introductions  [Starts: Mon 8/31]'}],
+                       create_missing=True)
+    mock = _mock_client()
+    mock.get_modules.return_value = [
+        {'id': 7, 'name': 'Module 0: Introductions  [Starts: Mon 8/31]',
+         'items': [{'type': 'Discussion', 'content_id': 30}]},
+    ]
+    _save_post(client, mock)
+    post = SavedDiscussionPost.query.one()
+    assert post.module.name == 'Introductions'
+    assert client.get('/tools/discussion-helper').get_data(as_text=True).count('Introductions') >= 1
+
+
+def test_delete_saved_post_then_resave(client):
+    _save_post(client, _modules_mock())
+    page = client.get('/tools/discussion-helper').get_data(as_text=True)
+    assert 'class="post-delete"' in page
+    assert client.delete('/api/discussion-posts/900').get_json() == {'ok': True}
+    assert SavedDiscussionPost.query.count() == 0
+    resp = _save_post(client, _modules_mock())
+    assert resp.get_json() == {'ok': True, 'created': True}
+
+
+def test_delete_missing_saved_post_404(client):
+    resp = client.delete('/api/discussion-posts/12345')
+    assert resp.status_code == 404
+    assert resp.get_json()['ok'] is False
+
+
+def _publish_mock(topics=None):
+    mock = _mock_client()
+    mock.get_courses.return_value = [
+        {'id': 5, 'name': 'Source Course'}, {'id': 6, 'name': 'CS111B Spring'},
+        {'id': 7, 'name': 'CS111B Other'}]
+    mock.get_course.side_effect = lambda cid: {'id': cid, 'name': f'Course {cid}'}
+    mock.get_discussion_topics.side_effect = lambda cid, refresh=False: (
+        topics if topics is not None else
+        ([{'id': 60, 'title': 'introductions '}] if cid == 6 else []))
+    mock.get_modules.return_value = []
+    mock.post_discussion_entry.return_value = {'id': 777}
+    return mock
+
+
+def _saved_intro_post(client):
+    _save_post(client, _modules_mock())
+
+
+def test_post_classes_excludes_source_course(client):
+    _saved_intro_post(client)
+    with patch('app.routes.dashboard.CanvasClient', return_value=_publish_mock()):
+        data = client.get('/api/discussion-posts/900/classes').get_json()
+    assert [c['course_id'] for c in data['classes']] == [6, 7]
+
+
+def test_publish_posts_and_returns_links(client):
+    _saved_intro_post(client)
+    mock = _publish_mock()
+    with patch('app.routes.dashboard.CanvasClient', return_value=mock):
+        data = client.post('/api/discussion-posts/900/publish', json={'course_ids': [6, 7]}).get_json()
+    ok, bad = data['results']
+    assert ok['ok'] and ok['url'].endswith('/courses/6/discussion_topics/60?entry_id=777')
+    assert not bad['ok'] and 'No discussion board named "Introductions"' in bad['error']
+    mock.post_discussion_entry.assert_called_once_with(6, 60, '<p>Welcome to the class</p>')
+
+
+def test_publish_validation(client):
+    _saved_intro_post(client)
+    with patch('app.routes.dashboard.CanvasClient', return_value=_publish_mock()):
+        assert client.post('/api/discussion-posts/900/publish', json={'course_ids': []}).status_code == 400
+        assert client.post('/api/discussion-posts/900/publish', json={'course_ids': [5]}).status_code == 400
+        assert client.post('/api/discussion-posts/1/publish', json={'course_ids': [6]}).status_code == 404
+
+
+def test_publish_canvas_failure_is_reported_per_course(client):
+    _saved_intro_post(client)
+    mock = _publish_mock()
+    mock.post_discussion_entry.side_effect = RuntimeError('boom')
+    with patch('app.routes.dashboard.CanvasClient', return_value=mock):
+        data = client.post('/api/discussion-posts/900/publish', json={'course_ids': [6]}).get_json()
+    assert data['ok'] and not data['results'][0]['ok']
+
+
+def test_publish_ambiguous_board_not_posted(client):
+    _saved_intro_post(client)
+    topics = [{'id': 60, 'title': 'Introductions'}, {'id': 61, 'title': 'Introductions'}]
+    mock = _publish_mock(topics)
+    with patch('app.routes.dashboard.CanvasClient', return_value=mock):
+        data = client.post('/api/discussion-posts/900/publish', json={'course_ids': [6]}).get_json()
+    assert 'not sure which' in data['results'][0]['error']
+    mock.post_discussion_entry.assert_not_called()
+
+
+def test_post_discussion_entry_client_posts_message(app):
+    from app.services.canvas_client import CanvasClient
+    with patch('app.services.canvas_client.requests.post') as post:
+        post.return_value.json.return_value = {'id': 9}
+        assert CanvasClient(token='t').post_discussion_entry(1, 2, '<p>x</p>') == {'id': 9}
+    assert post.call_args.args[0].endswith('/api/v1/courses/1/discussion_topics/2/entries')
+    assert post.call_args.kwargs['data'] == {'message': '<p>x</p>'}
