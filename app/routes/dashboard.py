@@ -347,6 +347,33 @@ def course_sync_stream(course_id):
     )
 
 
+_STUDENT_ACTIVITY_TYPES = ('student_message', 'discussion_entry', 'discussion_reply', 'submission')
+
+
+def _last_student_activity(course_id, tz):
+    """{student_id: date of their last student-initiated interaction}."""
+    return {
+        row.student_canvas_id: row.last_at.astimezone(tz).date()
+        for row in db.session.query(
+            InteractionEvent.student_canvas_id,
+            func.max(InteractionEvent.occurred_at).label('last_at'),
+        ).filter(
+            InteractionEvent.course_id == course_id,
+            InteractionEvent.event_type.in_(_STUDENT_ACTIVITY_TYPES),
+        ).group_by(InteractionEvent.student_canvas_id).all()
+    }
+
+
+def _student_work_order(enrollments, last_by_student):
+    """Student ids in the order the Student Work tab lists them: least recent
+    student activity first, students with none at the very top."""
+    ordered = sorted(
+        enrollments,
+        key=lambda e: (e['user_id'] in last_by_student,
+                       last_by_student.get(e['user_id']) or date.min))
+    return [e['user_id'] for e in ordered]
+
+
 @bp.route('/course/<int:course_id>')
 def course(course_id):
     client = CanvasClient()
@@ -380,17 +407,7 @@ def course(course_id):
     alert_days = current_app.config['STALE_ALERT_DAYS']
 
     # Last student-initiated interaction date per student (all time, not just the window)
-    student_event_types = ('student_message', 'discussion_entry', 'discussion_reply', 'submission')
-    last_by_student = {
-        row.student_canvas_id: row.last_at.astimezone(tz).date()
-        for row in db.session.query(
-            InteractionEvent.student_canvas_id,
-            func.max(InteractionEvent.occurred_at).label('last_at'),
-        ).filter(
-            InteractionEvent.course_id == course_id,
-            InteractionEvent.event_type.in_(student_event_types),
-        ).group_by(InteractionEvent.student_canvas_id).all()
-    }
+    last_by_student = _last_student_activity(course_id, tz)
 
     # Last instructor-initiated interaction date per student
     instructor_event_types = ('conversation', 'group_conversation', 'discussion_instructor_reply')
@@ -906,7 +923,17 @@ def student(course_id, student_id):
     all_labels = [{'id': l.id, 'name': l.name, 'color': l.color}
                   for l in Label.query.order_by(Label.name).all()]
 
+    # Neighbours in the Student Work tab's order, for the j / k keys.
+    order = _student_work_order(enrollments, _last_student_activity(course_id, tz))
+    prev_student_id = next_student_id = None
+    if student_id in order:
+        i = order.index(student_id)
+        prev_student_id = order[i - 1] if i > 0 else None
+        next_student_id = order[i + 1] if i + 1 < len(order) else None
+
     return render_template('dashboard/student.html',
+        prev_student_id=prev_student_id,
+        next_student_id=next_student_id,
         course=course_obj,
         student_id=student_id,
         student_name=student_name,

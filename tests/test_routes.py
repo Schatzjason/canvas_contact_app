@@ -1872,3 +1872,26 @@ def test_post_discussion_entry_client_posts_message(app):
         assert CanvasClient(token='t').post_discussion_entry(1, 2, '<p>x</p>') == {'id': 9}
     assert post.call_args.args[0].endswith('/api/v1/courses/1/discussion_topics/2/entries')
     assert post.call_args.kwargs['data'] == {'message': '<p>x</p>'}
+
+
+def _jk_urls(client, mock, student_id):
+    import re
+    with patch('app.routes.dashboard.CanvasClient', return_value=mock):
+        page = client.get(f'/course/{COURSE_ID}/student/{student_id}').get_data(as_text=True)
+    nxt = re.search(r'var nextUrl = "([^"]*)"', page).group(1)
+    prev = re.search(r'var prevUrl = "([^"]*)"', page).group(1)
+    return prev, nxt
+
+
+def test_student_page_jk_follows_student_work_order(client):
+    # Student Work order: no activity first, then oldest activity -> newest.
+    enrollments = [{'user_id': sid, 'user': {'name': f'S{sid}', 'sortable_name': f'S{sid}'}}
+                   for sid in (301, 302, 303)]
+    _seed_event(2, student_id=301, source_id=1)    # most recent -> last
+    _seed_event(9, student_id=302, source_id=2)    # older -> middle
+    # 303 has none -> first.  Order: 303, 302, 301
+    mock = _mock_client(enrollments=enrollments)
+    base = f'/course/{COURSE_ID}/student/'
+    assert _jk_urls(client, mock, 303) == ('', base + '302')
+    assert _jk_urls(client, mock, 302) == (base + '303', base + '301')
+    assert _jk_urls(client, mock, 301) == (base + '302', '')

@@ -1568,4 +1568,19 @@ attachNoteAutosave(
   if (btn.dataset.stale === 'true') refresh();
 })();
 </script>
+<script>
+// j = next student down the Student Work list, k = previous (up).
+(function () {
+  var nextUrl = {{ (url_for('dashboard.student', course_id=course.id, student_id=next_student_id) if next_student_id else '')|tojson }};
+  var prevUrl = {{ (url_for('dashboard.student', course_id=course.id, student_id=prev_student_id) if prev_student_id else '')|tojson }};
+  document.addEventListener('keydown', function (e) {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.isComposing) return;
+    if (e.key !== 'j' && e.key !== 'k') return;
+    var t = e.target;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    var url = e.key === 'j' ? nextUrl : prevUrl;
+    if (url) { e.preventDefault(); window.location.href = url; }
+  });
+})();
+</script>
 {% endblock %}
