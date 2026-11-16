@@ -5,7 +5,43 @@ from sqlalchemy import distinct
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 
+from app.services.git_sync import DATA_PATH as DEFAULT_DISCUSSION_DATA_PATH
+
+
 def register_commands(app):
+
+    @app.cli.command('export-discussion-data')
+    @click.option('--path', default=DEFAULT_DISCUSSION_DATA_PATH, show_default=True)
+    def export_discussion_data(path):
+        """Write saved posts and the course catalog to a JSON file."""
+        import json
+        import os
+        from app.services.discussion_data import export_data
+
+        data = export_data()
+        os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.write('\n')
+        click.echo(f"Wrote {path}: {len(data['saved_posts'])} posts, "
+                   f"{len(data['course_names'])} course names, "
+                   f"{len(data['canvas_module_links'])} module links.")
+
+    @app.cli.command('import-discussion-data')
+    @click.option('--path', default=DEFAULT_DISCUSSION_DATA_PATH, show_default=True)
+    def import_discussion_data(path):
+        """Merge a JSON export of saved posts and the course catalog into the
+        database (updates existing rows, never deletes)."""
+        import json
+        from app.services.discussion_data import import_data
+
+        try:
+            with open(path, encoding='utf-8') as f:
+                data = json.load(f)
+            counts = import_data(data)
+        except (OSError, ValueError) as exc:
+            raise click.ClickException(str(exc))
+        click.echo('Imported: ' + ', '.join(f'{v} {k.replace("_", " ")}' for k, v in counts.items()))
 
     @app.cli.command('link-course')
     @click.argument('canvas_course_id', type=int)

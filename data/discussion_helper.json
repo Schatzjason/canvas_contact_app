@@ -1,0 +1,266 @@
+{
+  "version": 1,
+  "course_names": [
+    {
+      "name": "CS111B",
+      "modules": [
+        {
+          "name": "Introductions",
+          "position": 1
+        },
+        {
+          "name": "Variables",
+          "position": 2
+        },
+        {
+          "name": "Branches",
+          "position": 3
+        },
+        {
+          "name": "Loops",
+          "position": 4
+        },
+        {
+          "name": "Arrays",
+          "position": 5
+        },
+        {
+          "name": "Methods",
+          "position": 6
+        },
+        {
+          "name": "OOP Part 1",
+          "position": 7
+        },
+        {
+          "name": "OOP Part 2",
+          "position": 8
+        },
+        {
+          "name": "Midterm",
+          "position": 9
+        },
+        {
+          "name": "Inheritance Part 1",
+          "position": 10
+        },
+        {
+          "name": "Inheritance Part 2",
+          "position": 11
+        },
+        {
+          "name": "Exceptions",
+          "position": 12
+        },
+        {
+          "name": "GUI",
+          "position": 13
+        },
+        {
+          "name": "Collections, Generics, Files",
+          "position": 14
+        },
+        {
+          "name": "Practice!",
+          "position": 15
+        }
+      ]
+    }
+  ],
+  "canvas_course_links": [
+    {
+      "canvas_course_id": 73655,
+      "course_name": "CS111B"
+    }
+  ],
+  "canvas_module_links": [
+    {
+      "canvas_course_id": 73655,
+      "canvas_module_id": 781724,
+      "course_name": "CS111B",
+      "module_name": "Introductions"
+    },
+    {
+      "canvas_course_id": 73655,
+      "canvas_module_id": 781725,
+      "course_name": "CS111B",
+      "module_name": "Variables"
+    },
+    {
+      "canvas_course_id": 73655,
+      "canvas_module_id": 781726,
+      "course_name": "CS111B",
+      "module_name": "Branches"
+    },
+    {
+      "canvas_course_id": 73655,
+      "canvas_module_id": 781727,
+      "course_name": "CS111B",
+      "module_name": "Loops"
+    },
+    {
+      "canvas_course_id": 73655,
+      "canvas_module_id": 781728,
+      "course_name": "CS111B",
+      "module_name": "Arrays"
+    },
+    {
+      "canvas_course_id": 73655,
+      "canvas_module_id": 781729,
+      "course_name": "CS111B",
+      "module_name": "Methods"
+    },
+    {
+      "canvas_course_id": 73655,
+      "canvas_module_id": 781730,
+      "course_name": "CS111B",
+      "module_name": "OOP Part 1"
+    },
+    {
+      "canvas_course_id": 73655,
+      "canvas_module_id": 781731,
+      "course_name": "CS111B",
+      "module_name": "OOP Part 2"
+    },
+    {
+      "canvas_course_id": 73655,
+      "canvas_module_id": 781732,
+      "course_name": "CS111B",
+      "module_name": "Midterm"
+    },
+    {
+      "canvas_course_id": 73655,
+      "canvas_module_id": 781733,
+      "course_name": "CS111B",
+      "module_name": "Inheritance Part 1"
+    },
+    {
+      "canvas_course_id": 73655,
+      "canvas_module_id": 781734,
+      "course_name": "CS111B",
+      "module_name": "Inheritance Part 2"
+    },
+    {
+      "canvas_course_id": 73655,
+      "canvas_module_id": 781735,
+      "course_name": "CS111B",
+      "module_name": "Exceptions"
+    },
+    {
+      "canvas_course_id": 73655,
+      "canvas_module_id": 781736,
+      "course_name": "CS111B",
+      "module_name": "GUI"
+    },
+    {
+      "canvas_course_id": 73655,
+      "canvas_module_id": 781737,
+      "course_name": "CS111B",
+      "module_name": "Collections, Generics, Files"
+    },
+    {
+      "canvas_course_id": 73655,
+      "canvas_module_id": 781738,
+      "course_name": "CS111B",
+      "module_name": "Practice!"
+    }
+  ],
+  "saved_posts": [
+    {
+      "course_id": 73655,
+      "topic_id": 1550271,
+      "entry_id": 10384930,
+      "body": "<link rel=\"stylesheet\" href=\"https://instructure-uploads.s3.amazonaws.com/account_64890000000000001/attachments/10745288/dp_mobile_app_10312023.css\"><p><span>A key question of the week is this: what is the difference between an abstract class as an interface?&nbsp;</span></p>\n<p><span>I'm hoping we can get a discussion going on this board.&nbsp;</span></p>\n<p><span>An interesting way to move the discussion along is to think of physical-world analogies. If anyone can think of something that works like an abstract class or an interface it would be great to hear it.&nbsp;</span></p>\n<p><span>For abstract classes, I like the example from carmakers that create a car chassis (most of what you can't see in a car) and then build two different cars on top of it. Toyota, for example, uses the same chassis for their Camry and also for the similar Lexus model. A chassis is a big part of the car, but you can't use it on its own. It needs to be completed with a body and interior, and some parts of the chassis will be modified. A chassis is-a car. But not a complete car.&nbsp;</span></p>\n<p><span>For interfaces, I like the example of the simple&nbsp; two or three pronged electrical wall plug. They provide a way for a device to interface with a wall socket. Notice very different devices can implement this same interface. Lamps, fans, printers, computers, dishwashers, piano keyboards, toasters, phone chargers. The plug is not the device, in the same way that a chassis is a car. But it is important to how the device fits into its environment.&nbsp;</span></p>\n<p><span>There may be a good hint in examples like this as to why a class can only inherit from one class (and therefore one abstract class), but they can implement multiple interfaces. </span></p><script src=\"https://instructure-uploads.s3.amazonaws.com/account_64890000000000001/attachments/10745291/dp_mobile_app_10312023.js\"></script>",
+      "board_name": "Discussion 10: More Inheritance",
+      "title": "Real world analogies for Interfaces and Abstract Classes",
+      "canvas_module_name": "Module 10: Inheritance Part 2   [Starts: Wed 11/4]",
+      "course_name": "CS111B",
+      "module_name": "Inheritance Part 2",
+      "saved_at": "2026-11-09T16:25:44.495642+00:00"
+    },
+    {
+      "course_id": 73655,
+      "topic_id": 1568000,
+      "entry_id": 10392479,
+      "body": "<link rel=\"stylesheet\" href=\"https://instructure-uploads.s3.amazonaws.com/account_64890000000000001/attachments/10745288/dp_mobile_app_10312023.css\"><div><strong data-olk-copy-source=\"MessageBody\">CCSF competition team forming for Embedded Capture the Flag</strong></div>\n<p><span>CCSF is participating in MITRE's Embedded Capture The Flag (eCTF), a competition focused on embedded development and security. This is an opportunity to gain experience in both defensive design and offensive security, using real hardware and dealing with real, unintended vulnerabilities rather than canned challenges. Positions on the team are open to both full- and part-time students in Spring 2027. For more details and to find the application form, please visit: </span><a title=\"Original URL: https://sites.google.com/view/ccsf-ectf-2027/. Click or tap if you trust this link.\" href=\"https://nam04.safelinks.protection.outlook.com/?url=https%3A%2F%2Fsites.google.com%2Fview%2Fccsf-ectf-2027%2F&amp;data=05%7C02%7Cjschatz%40ccsf.edu%7Cdf7cde6d301c43b7d8c908df3f543e4b%7C5e0f22d68a16417ebf3ad081c98b38d8%7C0%7C0%7C639299303241906223%7CUnknown%7CTWFpbGZsb3d8eyJFbXB0eU1hcGkiOnRydWUsIlYiOiIwLjAuMDAwMCIsIlAiOiJXaW4zMiIsIkFOIjoiTWFpbCIsIldUIjoyfQ%3D%3D%7C0%7C%7C%7C&amp;sdata=yiNWhUm78SENS1MaPKbOOJPkAcn%2BgoY1EvPyMXC7iqM%3D&amp;reserved=0\" target=\"_blank\" data-auth=\"NotApplicable\" data-linkindex=\"2\">https://sites.google.com/view/ccsf-ectf-2027/</a><span>&nbsp;</span></p><script src=\"https://instructure-uploads.s3.amazonaws.com/account_64890000000000001/attachments/10745291/dp_mobile_app_10312023.js\"></script>",
+      "board_name": "Opportunities from the CS Department",
+      "title": null,
+      "canvas_module_name": null,
+      "course_name": null,
+      "module_name": null,
+      "saved_at": "2026-11-10T23:48:02.926847+00:00"
+    },
+    {
+      "course_id": 73658,
+      "topic_id": 1553036,
+      "entry_id": 10368861,
+      "body": "<link rel=\"stylesheet\" href=\"https://instructure-uploads.s3.amazonaws.com/account_64890000000000001/attachments/10745288/dp_mobile_app_10312023.css\"><p>In section 931 a student asked if there was polymorphism in GridWriter.java, in the GridWriter code for the programming project. You can find the code here:&nbsp; <a class=\"inline_disabled\" href=\"https://www.onlinegdb.com/8FbI20bTu\" target=\"_blank\">GridWriter on OnlineGDB</a></p>\n<p>There is polymorphism in this class. Take a look, and notice that it doesn't ever mention Circles or Rectangles, even though we know that it can print them with its weird text printing. How does it do that?&nbsp;</p>\n<p>The key is the items array, declared like this on line 3: &nbsp;<code>private GridItem items[];</code></p>\n<p>Each reference in that array is a GridItem reference. But the objects that those elements point to are Rectangles and Circles. That's the polymorphism you are looking for.&nbsp;</p>\n<p>It allows for a really cool line. Line 63, down in the display() method:&nbsp;</p>\n<p><span style=\"color: #2b7abc;\">&nbsp; &nbsp;<span style=\"color: #6a7883;\"> &nbsp; &nbsp; // Count the number of GridItems that cover this coordinate</span></span><br>&nbsp; &nbsp; &nbsp; &nbsp; count = 0;</p>\n<p>&nbsp; &nbsp; &nbsp; &nbsp; for (int i = 0; i &lt; size; i++) {<br>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; if (<span style=\"color: #0e68b3;\"><strong>items[i].containsPoint(c, r)</strong></span>) {<br>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; count++;<br>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; }<br>&nbsp; &nbsp; &nbsp; &nbsp; }</p>\n<p>That for loop goes through the array and calls containsPoint(c, r) on each point reference in the array. <em>Sometimes the invocation is on a Circle, and other times it is on a Rectangle</em>. That is the polymorphism at work.&nbsp;</p>\n<p>We could discuss that more on this thread.&nbsp;</p><script src=\"https://instructure-uploads.s3.amazonaws.com/account_64890000000000001/attachments/10745291/dp_mobile_app_10312023.js\"></script>",
+      "board_name": "Discussion 10: More Inheritance",
+      "title": "Why containsPoint is ploymorphic",
+      "canvas_module_name": "Module 10: Inheritance Part 2   [Starts: Wed 11/4]",
+      "course_name": null,
+      "module_name": null,
+      "saved_at": "2026-11-10T19:23:51.843676+00:00"
+    },
+    {
+      "course_id": 73658,
+      "topic_id": 1553036,
+      "entry_id": 10391733,
+      "body": "<link rel=\"stylesheet\" href=\"https://instructure-uploads.s3.amazonaws.com/account_64890000000000001/attachments/10745288/dp_mobile_app_10312023.css\"><p>Here is a totally different way to approach the two NumberGuessers. It uses two interfaces to factor out the small difference between the two classes.&nbsp;</p>\n<p>If you are interested in seeing how an interface can make for clean code, check it out here: <a class=\"inline_disabled\" href=\"https://onlinegdb.com/WpQLw7Tta\" target=\"_blank\">NumberGuessers Refactored with Interfaces</a></p>\n<p>We can discuss</p><script src=\"https://instructure-uploads.s3.amazonaws.com/account_64890000000000001/attachments/10745291/dp_mobile_app_10312023.js\"></script>",
+      "board_name": "Discussion 10: More Inheritance",
+      "title": "Code for Number Guessers with Interface",
+      "canvas_module_name": "Module 10: Inheritance Part 2   [Starts: Wed 11/4]",
+      "course_name": null,
+      "module_name": null,
+      "saved_at": "2026-11-10T19:39:37.157867+00:00"
+    },
+    {
+      "course_id": 73658,
+      "topic_id": 1553042,
+      "entry_id": 10415687,
+      "body": "<link rel=\"stylesheet\" href=\"https://instructure-uploads.s3.amazonaws.com/account_64890000000000001/attachments/10745288/dp_mobile_app_10312023.css\"><p>The custom exception (<code>NumberGuesserIllegalStateException</code>) is what gets thrown in higher() and lower(), and then caught in main.&nbsp;</p>\n<p>We could throw and catch a different exception. It could even just be a plain old Exception. But the typical Java style here is to make our own.&nbsp;</p>\n<p>Imagine we were making a Number Guessing library, that could be used by coworkers, or by lots of different developers around the world. (Far fetched, but it mirrors a real world scenario.)</p>\n<p>In that case, we are trying to communicate that a NumberGuesser can get into a bad state, where there are no viable guesses left. We could just put that in some documenation, but... who reads documentation.&nbsp;</p>\n<p>Instead we want to build this right into the machinery. So we make this a checked exception. Now, whenever a developer uses our class the compiler will ask them what they want to do about <code>NumberGuesserIllegalStateException.</code>. That is a nice thing to be able to express in your code.&nbsp;</p><script src=\"https://instructure-uploads.s3.amazonaws.com/account_64890000000000001/attachments/10745291/dp_mobile_app_10312023.js\"></script>",
+      "board_name": "Discussion 11: Exceptions",
+      "title": "Why a custom excpetion for the guessers?",
+      "canvas_module_name": "Module 11: Exceptions   [Starts: Wed 11/11]",
+      "course_name": null,
+      "module_name": null,
+      "saved_at": "2026-11-16T17:48:23.972671+00:00"
+    },
+    {
+      "course_id": 73661,
+      "topic_id": 1571574,
+      "entry_id": 10388362,
+      "body": "<link rel=\"stylesheet\" href=\"https://instructure-uploads.s3.amazonaws.com/account_64890000000000001/attachments/10745288/dp_mobile_app_10312023.css\"><p><span>There are a few different ways to handle the poker hands challenge.&nbsp;</span></p>\n<p><span>One way that is worth considering is to sort the array. That way any matching cards are next to each other. You can use a tool called </span><strong>Arrays</strong><span>.&nbsp;</span></p>\n<p><span>To use the tool, you need to put <code>import java.util.Arrays;</code> at the top of the file. Then invoke </span><strong>Arrays.sort()</strong><span> like this:&nbsp;</span></p>\n<pre><span>int[] hand = new int[5];<br><br><span style=\"color: #2b7abc;\">// code that initializes array here<br>\n</span>Arrays.sort(hand)\n</span></pre>\n<p>&nbsp;</p><script src=\"https://instructure-uploads.s3.amazonaws.com/account_64890000000000001/attachments/10745291/dp_mobile_app_10312023.js\"></script>",
+      "board_name": "Discussion 4: Arrays",
+      "title": "Sorting for poker hands",
+      "canvas_module_name": "Module 4: Arrays   [Starts: Mon 11/9]",
+      "course_name": null,
+      "module_name": null,
+      "saved_at": "2026-11-09T20:44:00.647248+00:00"
+    },
+    {
+      "course_id": 75034,
+      "topic_id": 1573089,
+      "entry_id": 10411786,
+      "body": "<link rel=\"stylesheet\" href=\"https://instructure-uploads.s3.amazonaws.com/account_64890000000000001/attachments/10745288/dp_mobile_app_10312023.css\"><p>This is a key question. A good thing to discuss.</p>\n<p>Projects only get bigger and bigger. They spread into hundreds of files, sometimes thousands. The importance of the main method recedes. It is normal to work on a Java project from months without ever looking at the main method. All code is in one custom method or another.&nbsp;</p>\n<p>Imagine, for example, that you get hired by Netflix to work on its backend, which is mostly Java. I asked some AI chats to estimate how many .java files they have. It's on the scale of hundreds of thousands. A developer would just drop into a small piece of that. How it all gets organized is the grand challenge of software engineering.&nbsp;</p>\n<p>OOP (next module!) will get us a step closer thinking about how that can be done. But it only adds variations on your question. We'll have plenty of opportunities to discuss.&nbsp;</p><script src=\"https://instructure-uploads.s3.amazonaws.com/account_64890000000000001/attachments/10745291/dp_mobile_app_10312023.js\"></script>",
+      "board_name": "Discussion 5: Methods",
+      "title": "Why Methods?",
+      "canvas_module_name": "Module 5: Methods   [Starts: Thu 11/12]",
+      "course_name": null,
+      "module_name": null,
+      "saved_at": "2026-11-16T18:56:08.705133+00:00"
+    },
+    {
+      "course_id": 75034,
+      "topic_id": 1573089,
+      "entry_id": 10415837,
+      "body": "<link rel=\"stylesheet\" href=\"https://instructure-uploads.s3.amazonaws.com/account_64890000000000001/attachments/10745288/dp_mobile_app_10312023.css\"><p>That is a really important one.&nbsp;</p>\n<p>For some methods the whole point is to get a value back. A good example is the scanner's nextInt() method. We really want that int. In the programming project getMidpoint() and getUsersResponseToGuess are the same. We invoke the method to a value back.&nbsp;</p>\n<p>In other cases, we invoke methods without wanting a value back. println() is that way. We invoke it to print to the console. We don't use a return value.&nbsp;</p>\n<p>That second kind of method, the ones were we don't care about a return value, are the ones that return <strong>void</strong>.&nbsp;</p>\n<p>A method has to be one or the other. If the return type in the signature is void, it can't return anything. If the return type is a data type, then it has to return a value that matches that data type.&nbsp;</p>\n<p>We should discuss more</p><script src=\"https://instructure-uploads.s3.amazonaws.com/account_64890000000000001/attachments/10745291/dp_mobile_app_10312023.js\"></script>",
+      "board_name": "Discussion 5: Methods",
+      "title": "Void vs. return type",
+      "canvas_module_name": "Module 5: Methods   [Starts: Thu 11/12]",
+      "course_name": null,
+      "module_name": null,
+      "saved_at": "2026-11-16T18:55:18.199691+00:00"
+    }
+  ]
+}

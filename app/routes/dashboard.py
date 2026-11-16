@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from html.parser import HTMLParser
 from urllib.parse import parse_qs, urlparse
@@ -23,6 +24,7 @@ from app.models.message_template import MessageTemplate
 from app.models.pinned_discussion import PinnedDiscussion
 from app.models.saved_discussion_post import SavedDiscussionPost
 from app.services.course_catalog import module_name_for_canvas_module
+from app.services.git_sync import GitSyncError, commit_data, fetch_data
 from app.models.student_label import StudentLabel
 from app.models.student_note import StudentNote
 from app.models.student_record import StudentRecord
@@ -1586,6 +1588,33 @@ def api_save_discussion_post():
     created, _post = _upsert_saved_post(
         course_id, topic_id, entry_id, body, (data.get('board_name') or '').strip())
     return {'ok': True, 'created': created}
+
+
+def _repo_dir():
+    return current_app.config.get('REPO_DIR') or os.path.dirname(current_app.root_path)
+
+
+def _git_sync_response(action):
+    try:
+        return action()
+    except GitSyncError as exc:
+        return {'ok': False, 'error': str(exc)}, 502
+
+
+@bp.route('/api/discussion-data/commit', methods=['POST'])
+def api_commit_discussion_data():
+    """"Commit data to repo" button: export, commit the data file, push."""
+    return _git_sync_response(
+        lambda: {'ok': True, 'message': commit_data(_repo_dir())})
+
+
+@bp.route('/api/discussion-data/fetch', methods=['POST'])
+def api_fetch_discussion_data():
+    """"Fetch data from repo" button: merge the repo's data file into the database."""
+    def run():
+        message, _counts = fetch_data(_repo_dir())
+        return {'ok': True, 'message': message}
+    return _git_sync_response(run)
 
 
 @bp.route('/api/discussion-posts/<int:entry_id>', methods=['PATCH'])

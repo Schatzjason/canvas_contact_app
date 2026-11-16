@@ -62,6 +62,10 @@
   .page-head h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
   .page-head p { font-size: 14px; color: var(--text-secondary); margin-top: 4px; }
 
+  .top-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .sync-status { margin: -8px 40px 12px; min-height: 0; font-size: 13px; color: var(--text-secondary); }
+  .sync-status:empty { display: none; }
+  .sync-status.bad { color: #c0392b; }
   .layout { display: grid; grid-template-columns: 320px 1fr; gap: 24px; padding: 0 40px 60px; align-items: start; }
   .tree { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px; position: sticky; top: 12px; max-height: calc(100vh - 100px); overflow-y: auto; }
   .tree-empty { font-size: 13px; color: var(--text-secondary); padding: 12px; line-height: 1.5; }
@@ -101,8 +105,13 @@
     <h1>Discussion Helper</h1>
     <p>Save discussion posts you like and reuse them in other courses.</p>
   </div>
-  <button type="button" class="btn btn-primary" id="save-by-url-btn">save by url</button>
+  <div class="top-actions">
+    <button type="button" class="btn" id="fetch-data-btn">Fetch data from repo</button>
+    <button type="button" class="btn" id="commit-data-btn">Commit data to repo</button>
+    <button type="button" class="btn btn-primary" id="save-by-url-btn">save by url</button>
+  </div>
 </div>
+<div class="sync-status" id="sync-status" role="status"></div>
 
 <div class="layout">
   <nav class="tree" id="tree" aria-label="Saved posts"></nav>
@@ -284,6 +293,47 @@
         })
         .catch(function () { window.alert('Could not reach the app.'); });
     }
+  });
+
+  // ── sync data through the git repo ──
+  var statusEl = document.getElementById('sync-status');
+  function sync(btn, url, question, busy, reloadAfter) {
+    if (!window.confirm(question)) return;
+    var label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = busy;
+    statusEl.className = 'sync-status';
+    statusEl.textContent = '';
+    fetch(url, {method: 'POST'})
+      .then(function (r) {
+        return r.json().catch(function () { return {ok: false, error: 'Unexpected response.'}; });
+      })
+      .then(function (data) {
+        btn.disabled = false;
+        btn.textContent = label;
+        if (!data.ok) {
+          statusEl.className = 'sync-status bad';
+          statusEl.textContent = data.error || 'Failed.';
+          return;
+        }
+        if (reloadAfter) { window.location.reload(); return; }
+        statusEl.textContent = data.message;
+      })
+      .catch(function () {
+        btn.disabled = false;
+        btn.textContent = label;
+        statusEl.className = 'sync-status bad';
+        statusEl.textContent = 'Could not reach the app.';
+      });
+  }
+  document.getElementById('commit-data-btn').addEventListener('click', function () {
+    sync(this, '/api/discussion-data/commit',
+         'Commit the Discussion Helper data file and push it to the repo?', 'Committing\u2026', false);
+  });
+  document.getElementById('fetch-data-btn').addEventListener('click', function () {
+    sync(this, '/api/discussion-data/fetch',
+         'Fetch from the repo and merge its Discussion Helper data into this app? Nothing here is deleted.',
+         'Fetching\u2026', true);
   });
 
   // ── save by url ──
