@@ -1692,10 +1692,10 @@ def _by_url_mock(entry=None, title='Introductions'):
     return mock
 
 
-def _save_by_url(client, url, mock=None):
+def _save_by_url(client, url, mock=None, **extra):
     mock = mock or _by_url_mock()
     with patch('app.routes.dashboard.CanvasClient', return_value=mock):
-        return client.post('/api/discussion-posts/by-url', json={'url': url}), mock
+        return client.post('/api/discussion-posts/by-url', json={'url': url, **extra}), mock
 
 
 BY_URL = 'https://ccsf.instructure.com/courses/1/discussion_topics/30?entry_id=3'
@@ -1705,7 +1705,7 @@ def test_save_by_url_fetches_entry_and_saves_it(client):
     resp, mock = _save_by_url(client, BY_URL)
     data = resp.get_json()
     assert data['ok'] is True and data['created'] is True
-    assert data['post'] == {'entry_id': 3, 'board_name': 'Introductions',
+    assert data['post'] == {'entry_id': 3, 'title': '', 'board_name': 'Introductions',
                             'module_name': 'Module 0', 'text': 'Welcome to the class'}
     mock.get_discussion_entry.assert_called_once_with(1, 30, 3)
     post = SavedDiscussionPost.query.one()
@@ -1789,7 +1789,7 @@ def test_saved_post_uses_linked_module_name(client):
 def test_delete_saved_post_then_resave(client):
     _save_post(client, _modules_mock())
     page = client.get('/tools/discussion-helper').get_data(as_text=True)
-    assert 'class="post-delete"' in page
+    assert 'id="tree"' in page and '"entry_id": 900' in page
     assert client.delete('/api/discussion-posts/900').get_json() == {'ok': True}
     assert SavedDiscussionPost.query.count() == 0
     resp = _save_post(client, _modules_mock())
@@ -1895,3 +1895,38 @@ def test_student_page_jk_follows_student_work_order(client):
     assert _jk_urls(client, mock, 303) == ('', base + '302')
     assert _jk_urls(client, mock, 302) == (base + '303', base + '301')
     assert _jk_urls(client, mock, 301) == (base + '302', '')
+
+
+def test_save_by_url_stores_title_and_resave_without_title_keeps_it(client):
+    resp, _ = _save_by_url(client, BY_URL, title='  Week 1 welcome  ')
+    assert resp.get_json()['post']['title'] == 'Week 1 welcome'
+    resp, _ = _save_by_url(client, BY_URL)            # no title this time
+    assert resp.get_json()['post']['title'] == 'Week 1 welcome'
+    resp, _ = _save_by_url(client, BY_URL, title='Renamed')
+    assert resp.get_json()['post']['title'] == 'Renamed'
+    assert SavedDiscussionPost.query.one().title == 'Renamed'
+
+
+def test_extension_resave_keeps_title(client):
+    _save_post(client, _modules_mock())
+    assert client.patch('/api/discussion-posts/900', json={'title': 'Mine'}).status_code == 200
+    _save_post(client, _modules_mock(), body='<p>Edited</p>')
+    assert SavedDiscussionPost.query.one().title == 'Mine'
+
+
+def test_update_title_sets_clears_and_validates(client):
+    _save_post(client, _modules_mock())
+    resp = client.patch('/api/discussion-posts/900', json={'title': ' Intro post '})
+    assert resp.get_json()['post']['title'] == 'Intro post'
+    resp = client.patch('/api/discussion-posts/900', json={'title': '   '})
+    assert resp.get_json()['post']['title'] == ''
+    assert SavedDiscussionPost.query.one().title is None
+    assert client.patch('/api/discussion-posts/900', json={}).status_code == 400
+    assert client.patch('/api/discussion-posts/1', json={'title': 'x'}).status_code == 404
+
+
+def test_discussion_helper_page_embeds_titles(client):
+    _save_post(client, _modules_mock())
+    client.patch('/api/discussion-posts/900', json={'title': 'Embedded title'})
+    page = client.get('/tools/discussion-helper').get_data(as_text=True)
+    assert 'Embedded title' in page and 'id="content"' in page and 'id="url-title"' in page

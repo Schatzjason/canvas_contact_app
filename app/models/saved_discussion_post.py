@@ -14,6 +14,7 @@ class SavedDiscussionPost(db.Model):
     entry_id    = db.Column(db.BigInteger, nullable=False)
     body        = db.Column(db.Text, nullable=False)           # Canvas HTML
     board_name  = db.Column(db.String(255), nullable=False, default='')
+    title       = db.Column(db.String(255), nullable=True)   # internal label, never posted
     module_name = db.Column(db.String(255), nullable=True)   # Canvas's title (fallback)
     module_name_id = db.Column(db.Integer, db.ForeignKey('module_name.id'), nullable=True)
     module = db.relationship('ModuleName')

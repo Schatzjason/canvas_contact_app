@@ -43,29 +43,6 @@
   .nav-sep { font-family: var(--mono); font-size: 13px; color: #3a3835; margin: 0 10px; user-select: none; }
   .nav-current { font-family: var(--mono); font-size: 12px; font-weight: 500; color: #f0ede8; letter-spacing: 0.04em; }
 
-  .page { max-width: 880px; margin: 0 auto; padding: 40px 40px 80px; }
-  .page-head { border-left: 4px solid var(--accent); padding-left: 16px; margin-bottom: 28px; }
-  .page-head h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
-  .page-head p { font-size: 14px; color: var(--text-secondary); margin-top: 4px; }
-
-  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 32px; text-align: center; }
-  .panel-tag { display: inline-block; font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-ink); background: var(--accent-soft); border: 1px solid var(--accent); padding: 2px 8px; border-radius: 3px; margin-bottom: 14px; }
-  .post { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 16px 20px; margin-bottom: 14px; }
-  .post { position: relative; }
-  .post-delete { position: absolute; top: 8px; right: 10px; border: 0; background: none; color: var(--text-tertiary); font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 4px; }
-  .post-delete:hover { color: #c0392b; background: rgba(192,57,43,0.1); }
-  .post-actions { margin-top: 12px; }
-  .btn-small { font-size: 12px; padding: 4px 12px; }
-  .class-list { max-height: 260px; overflow-y: auto; margin: 4px 0 8px; }
-  .class-row { display: flex; gap: 8px; align-items: center; padding: 6px 4px; font-size: 14px; cursor: pointer; }
-  .result-row { padding: 6px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
-  .result-row a { color: inherit; word-break: break-all; }
-  .result-bad { color: #c0392b; }
-  .post-meta { display: flex; gap: 10px; align-items: baseline; margin-bottom: 8px; }
-  .post-board { font-size: 14px; font-weight: 600; }
-  .post-module { font-family: var(--mono); font-size: 11px; color: var(--text-tertiary); letter-spacing: 0.04em; }
-  .post-text { font-size: 14px; line-height: 1.6; white-space: pre-wrap; color: var(--text-primary); }
-  .page-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
   .btn { font-family: var(--sans); font-size: 13px; font-weight: 500; padding: 7px 16px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text-primary); cursor: pointer; }
   .btn:hover { border-color: var(--accent); }
   .btn-primary { background: var(--accent); border-color: var(--accent); color: #1a1915; }
@@ -80,39 +57,56 @@
   .modal textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(244, 180, 0, 0.2); }
   .modal-error { color: #c0392b; font-size: 13px; margin-top: 8px; min-height: 18px; }
   .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
-  .panel h2 { font-size: 16px; font-weight: 500; }
-  .panel p { font-size: 13px; color: var(--text-secondary); margin-top: 6px; line-height: 1.6; }
+  .page-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 28px 40px 20px; }
+  .page-head { border-left: 4px solid var(--accent); padding-left: 16px; }
+  .page-head h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
+  .page-head p { font-size: 14px; color: var(--text-secondary); margin-top: 4px; }
+
+  .layout { display: grid; grid-template-columns: 320px 1fr; gap: 24px; padding: 0 40px 60px; align-items: start; }
+  .tree { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px; position: sticky; top: 12px; max-height: calc(100vh - 100px); overflow-y: auto; }
+  .tree-empty { font-size: 13px; color: var(--text-secondary); padding: 12px; line-height: 1.5; }
+  .board-head { width: 100%; display: flex; align-items: center; gap: 6px; background: none; border: 0; padding: 7px 8px; border-radius: 6px; font-family: var(--sans); font-size: 13px; font-weight: 600; color: var(--text-primary); text-align: left; cursor: pointer; }
+  .board-head:hover { background: var(--accent-soft); }
+  .board-head .chev { width: 12px; flex: none; font-size: 10px; color: var(--text-tertiary); transition: transform 0.12s; }
+  .board-head[aria-expanded="true"] .chev { transform: rotate(90deg); }
+  .board-head .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .board-head .count { font-family: var(--mono); font-size: 11px; font-weight: 400; color: var(--text-tertiary); }
+  .board-posts { list-style: none; margin: 0 0 4px; padding: 0; }
+  .tree-post { width: 100%; display: block; background: none; border: 0; border-left: 3px solid transparent; padding: 6px 8px 6px 26px; font-family: var(--sans); font-size: 13px; color: var(--text-primary); text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tree-post:hover { background: var(--bg); }
+  .tree-post.selected { background: var(--accent-soft); border-left-color: var(--accent); }
+  .tree-post.untitled { color: var(--text-tertiary); font-style: italic; }
+
+  .content { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 22px 26px; min-height: 240px; }
+  .content-empty { color: var(--text-secondary); font-size: 14px; line-height: 1.6; text-align: center; padding: 40px 0; }
+  .content-empty h2 { font-size: 16px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px; }
+  .title-input { width: 100%; font-family: var(--sans); font-size: 18px; font-weight: 600; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; outline: none; background: var(--bg); }
+  .title-input:focus { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 3px rgba(244, 180, 0, 0.2); }
+  .title-hint { font-size: 11px; color: var(--text-tertiary); margin: 4px 2px 14px; font-family: var(--mono); letter-spacing: 0.03em; }
+  .post-meta { display: flex; gap: 10px; align-items: baseline; margin-bottom: 10px; }
+  .post-board { font-size: 14px; font-weight: 600; }
+  .post-module { font-family: var(--mono); font-size: 11px; color: var(--text-tertiary); letter-spacing: 0.04em; }
+  .post-text { font-size: 14px; line-height: 1.6; white-space: pre-wrap; color: var(--text-primary); }
+  .post-actions { margin-top: 20px; display: flex; gap: 8px; }
+  .btn-danger:hover { border-color: #c0392b; color: #c0392b; }
+  .field-label { display: block; font-size: 12px; font-weight: 600; margin: 10px 0 4px; }
+  .field-label span { font-weight: 400; color: var(--text-tertiary); }
+  .modal textarea.short { min-height: 0; font-family: var(--sans); font-size: 14px; resize: none; }
+  @media (max-width: 800px) { .layout { grid-template-columns: 1fr; } .tree { position: static; max-height: 280px; } }
 {% endblock %}
 
 {% block content %}
-<div class="page">
-  <div class="page-top">
-    <div class="page-head">
-      <h1>Discussion Helper</h1>
-      <p>Save discussion posts you like and reuse them in other courses.</p>
-    </div>
-    <button type="button" class="btn" id="save-by-url-btn">save by url</button>
+<div class="page-top">
+  <div class="page-head">
+    <h1>Discussion Helper</h1>
+    <p>Save discussion posts you like and reuse them in other courses.</p>
   </div>
-  <div id="posts">
-  {% if not posts %}
-  <div class="panel" id="empty-panel">
-    <span class="panel-tag">Nothing saved</span>
-    <h2>No saved posts yet</h2>
-    <p>On a Canvas discussion page, use "Save to Discussion Helper" under one of your posts.</p>
-  </div>
-  {% endif %}
-  {% for p in posts %}
-  <article class="post" data-entry-id="{{ p.entry_id }}">
-    <button type="button" class="post-delete" title="Delete this saved post" aria-label="Delete saved post">&times;</button>
-    <div class="post-meta">
-      <span class="post-board">{{ p.board_name or 'Untitled discussion' }}</span>
-      {% if p.module_name %}<span class="post-module">{{ p.module_name }}</span>{% endif %}
-    </div>
-    <div class="post-text">{{ p.text }}</div>
-    <div class="post-actions"><button type="button" class="btn btn-small post-publish">Post to a class…</button></div>
-  </article>
-  {% endfor %}
-  </div>
+  <button type="button" class="btn btn-primary" id="save-by-url-btn">save by url</button>
+</div>
+
+<div class="layout">
+  <nav class="tree" id="tree" aria-label="Saved posts"></nav>
+  <section class="content" id="content" aria-live="polite"></section>
 </div>
 
 <div class="modal-back" id="url-modal" role="dialog" aria-modal="true" aria-labelledby="url-modal-title">
@@ -120,6 +114,8 @@
     <h2 id="url-modal-title">Save a post by URL</h2>
     <p>Paste the Canvas link to a discussion post, including <code>?entry_id=…</code>.</p>
     <textarea id="url-input" placeholder="https://ccsf.instructure.com/courses/73658/discussion_topics/1568002?entry_id=10344514" spellcheck="false"></textarea>
+    <label class="field-label" for="url-title">Title <span>(optional, internal only)</span></label>
+    <textarea id="url-title" class="short" rows="1" maxlength="255" placeholder="e.g. Welcome message, week 1"></textarea>
     <div class="modal-error" id="url-error"></div>
     <div class="modal-actions">
       <button type="button" class="btn" id="url-cancel">Cancel</button>
@@ -143,66 +139,168 @@
 
 <script>
 (function () {
+  var posts = {{ posts|tojson }};
+  var selectedId = null;
+  var openBoards = {};   // board name -> true when expanded
+
+  var treeEl = document.getElementById('tree');
+  var contentEl = document.getElementById('content');
+
+  function boardKey(p) { return p.board_name || 'Untitled discussion'; }
+  function find(id) {
+    for (var i = 0; i < posts.length; i++) if (String(posts[i].entry_id) === String(id)) return posts[i];
+    return null;
+  }
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  }
+
+  function renderTree() {
+    treeEl.textContent = '';
+    if (!posts.length) {
+      treeEl.appendChild(el('div', 'tree-empty', 'No saved posts yet. On a Canvas discussion page, use "Save to Discussion Helper" under one of your posts, or use "save by url".'));
+      return;
+    }
+    var groups = {};
+    posts.forEach(function (p) { (groups[boardKey(p)] = groups[boardKey(p)] || []).push(p); });
+    Object.keys(groups).sort(function (a, b) { return a.toLowerCase() < b.toLowerCase() ? -1 : 1; })
+      .forEach(function (name) {
+        var open = !!openBoards[name];
+        var head = el('button', 'board-head');
+        head.type = 'button';
+        head.setAttribute('aria-expanded', open ? 'true' : 'false');
+        head.dataset.board = name;
+        head.appendChild(el('span', 'chev', '\u25b6'));
+        head.appendChild(el('span', 'name', name));
+        head.appendChild(el('span', 'count', String(groups[name].length)));
+        treeEl.appendChild(head);
+        if (!open) return;
+        var ul = el('ul', 'board-posts');
+        groups[name].forEach(function (p) {
+          var li = el('li');
+          var b = el('button', 'tree-post' + (p.title ? '' : ' untitled') +
+                     (String(p.entry_id) === String(selectedId) ? ' selected' : ''),
+                     p.title || 'No Title');
+          b.type = 'button';
+          b.dataset.entryId = p.entry_id;
+          li.appendChild(b);
+          ul.appendChild(li);
+        });
+        treeEl.appendChild(ul);
+      });
+  }
+
+  function renderContent() {
+    contentEl.textContent = '';
+    var p = selectedId === null ? null : find(selectedId);
+    if (!p) {
+      var empty = el('div', 'content-empty');
+      empty.appendChild(el('h2', null, posts.length ? 'Select a post' : 'No saved posts yet'));
+      empty.appendChild(el('p', null, posts.length
+        ? 'Open a discussion board on the left and pick a post to see it here.'
+        : 'Save one from a Canvas discussion page, or paste a link with "save by url".'));
+      contentEl.appendChild(empty);
+      return;
+    }
+    var input = el('input', 'title-input');
+    input.id = 'title-field';
+    input.type = 'text';
+    input.maxLength = 255;
+    input.placeholder = 'Title';
+    input.value = p.title || '';
+    input.setAttribute('aria-label', 'Title');
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') input.blur(); });
+    input.addEventListener('blur', function () { saveTitle(p, input.value); });
+    contentEl.appendChild(input);
+    contentEl.appendChild(el('div', 'title-hint', 'INTERNAL ONLY \u2014 NEVER POSTED TO CANVAS'));
+
+    var meta = el('div', 'post-meta');
+    meta.appendChild(el('span', 'post-board', boardKey(p)));
+    if (p.module_name) meta.appendChild(el('span', 'post-module', p.module_name));
+    contentEl.appendChild(meta);
+    contentEl.appendChild(el('div', 'post-text', p.text));
+
+    var actions = el('div', 'post-actions');
+    var pub = el('button', 'btn btn-small', 'Post to a class\u2026');
+    pub.type = 'button';
+    pub.id = 'post-publish';
+    var del = el('button', 'btn btn-small btn-danger', 'Delete');
+    del.type = 'button';
+    del.id = 'post-delete';
+    actions.appendChild(pub);
+    actions.appendChild(del);
+    contentEl.appendChild(actions);
+  }
+
+  function select(id) {
+    selectedId = id;
+    var p = id === null ? null : find(id);
+    if (p) openBoards[boardKey(p)] = true;
+    try { history.replaceState(null, '', p ? '#' + p.entry_id : location.pathname); } catch (e) {}
+    renderTree();
+    renderContent();
+  }
+
+  function saveTitle(p, value) {
+    value = value.trim();
+    if (value === (p.title || '')) return;
+    fetch('/api/discussion-posts/' + p.entry_id, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({title: value}),
+    }).then(function (r) { return r.json(); }).then(function (data) {
+      if (!data.ok) { window.alert('Could not save the title.'); return; }
+      p.title = data.post.title;
+      renderTree();
+    }).catch(function () { window.alert('Could not reach the app.'); });
+  }
+
+  treeEl.addEventListener('click', function (e) {
+    var head = e.target.closest('.board-head');
+    if (head) {
+      openBoards[head.dataset.board] = !openBoards[head.dataset.board];
+      renderTree();
+      return;
+    }
+    var item = e.target.closest('.tree-post');
+    if (item) select(item.dataset.entryId);
+  });
+
+  contentEl.addEventListener('click', function (e) {
+    var p = find(selectedId);
+    if (!p) return;
+    if (e.target.closest('#post-publish')) pubOpen(p);
+    if (e.target.closest('#post-delete')) {
+      if (!window.confirm('Delete this saved post?')) return;
+      fetch('/api/discussion-posts/' + p.entry_id, {method: 'DELETE'})
+        .then(function (r) { return r.json().catch(function () { return {ok: false}; }); })
+        .then(function (data) {
+          if (!data.ok) { window.alert('Could not delete the post.'); return; }
+          posts = posts.filter(function (x) { return x !== p; });
+          select(null);
+        })
+        .catch(function () { window.alert('Could not reach the app.'); });
+    }
+  });
+
+  // ── save by url ──
   var modal = document.getElementById('url-modal');
   var input = document.getElementById('url-input');
+  var titleIn = document.getElementById('url-title');
   var errorEl = document.getElementById('url-error');
   var saveBtn = document.getElementById('url-save');
-  var postsEl = document.getElementById('posts');
 
   function openModal() {
     input.value = '';
+    titleIn.value = '';
     errorEl.textContent = '';
     modal.classList.add('open');
     input.focus();
   }
   function closeModal() { modal.classList.remove('open'); }
-
-  function card(p) {
-    var art = document.createElement('article');
-    art.className = 'post';
-    art.dataset.entryId = p.entry_id;
-    var del = document.createElement('button');
-    del.type = 'button';
-    del.className = 'post-delete';
-    del.title = 'Delete this saved post';
-    del.setAttribute('aria-label', 'Delete saved post');
-    del.textContent = '\u00d7';
-    art.appendChild(del);
-    var meta = document.createElement('div');
-    meta.className = 'post-meta';
-    var board = document.createElement('span');
-    board.className = 'post-board';
-    board.textContent = p.board_name || 'Untitled discussion';
-    meta.appendChild(board);
-    if (p.module_name) {
-      var mod = document.createElement('span');
-      mod.className = 'post-module';
-      mod.textContent = p.module_name;
-      meta.appendChild(mod);
-    }
-    var text = document.createElement('div');
-    text.className = 'post-text';
-    text.textContent = p.text;
-    art.appendChild(meta);
-    art.appendChild(text);
-    var actions = document.createElement('div');
-    actions.className = 'post-actions';
-    var pub = document.createElement('button');
-    pub.type = 'button';
-    pub.className = 'btn btn-small post-publish';
-    pub.textContent = 'Post to a class\u2026';
-    actions.appendChild(pub);
-    art.appendChild(actions);
-    return art;
-  }
-
-  function showPost(p) {
-    var empty = document.getElementById('empty-panel');
-    if (empty) empty.remove();
-    var existing = postsEl.querySelector('.post[data-entry-id="' + p.entry_id + '"]');
-    if (existing) existing.remove();
-    postsEl.insertBefore(card(p), postsEl.firstChild);  // newest first
-  }
 
   function save() {
     errorEl.textContent = '';
@@ -210,13 +308,15 @@
     fetch('/api/discussion-posts/by-url', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({url: input.value}),
+      body: JSON.stringify({url: input.value, title: titleIn.value}),
     }).then(function (r) {
       return r.json().catch(function () { return {ok: false, error: 'Unexpected response.'}; });
     }).then(function (data) {
       saveBtn.disabled = false;
       if (!data.ok) { errorEl.textContent = data.error || 'Could not save.'; return; }
-      showPost(data.post);
+      posts = posts.filter(function (x) { return String(x.entry_id) !== String(data.post.entry_id); });
+      posts.unshift(data.post);
+      select(data.post.entry_id);
       closeModal();
     }).catch(function () {
       saveBtn.disabled = false;
@@ -224,21 +324,7 @@
     });
   }
 
-  postsEl.addEventListener('click', function (e) {
-    var btn = e.target.closest('.post-delete');
-    if (!btn) return;
-    var art = btn.closest('.post');
-    if (!window.confirm('Delete this saved post?')) return;
-    fetch('/api/discussion-posts/' + art.dataset.entryId, {method: 'DELETE'})
-      .then(function (r) { return r.json().catch(function () { return {ok: false}; }); })
-      .then(function (data) {
-        if (!data.ok) { window.alert('Could not delete the post.'); return; }
-        art.remove();
-        if (!postsEl.querySelector('.post')) window.location.reload();  // show the empty state
-      })
-      .catch(function () { window.alert('Could not reach the app.'); });
-  });
-
+  // ── post to a class ──
   var pubModal = document.getElementById('pub-modal');
   var pubBody = document.getElementById('pub-body');
   var pubError = document.getElementById('pub-error');
@@ -260,12 +346,11 @@
     pubCancel.textContent = 'Cancel';
   }
 
-  function pubOpen(art) {
-    pubEntry = art.dataset.entryId;
+  function pubOpen(post) {
+    pubEntry = post.entry_id;
     pubReset();
-    var board = art.querySelector('.post-board');
     document.getElementById('pub-sub').textContent =
-      'Posts "' + (board ? board.textContent : '') + '" as a new top-level post in each class you pick.';
+      'Posts this as a new top-level post on "' + boardKey(post) + '" in each class you pick.';
     pubBody.textContent = 'Loading classes\u2026';
     pubModal.classList.add('open');
     fetch('/api/discussion-posts/' + pubEntry + '/classes')
@@ -339,10 +424,7 @@
     });
   }
 
-  postsEl.addEventListener('click', function (e) {
-    var btn = e.target.closest('.post-publish');
-    if (btn) pubOpen(btn.closest('.post'));
-  });
+
   pubGo.addEventListener('click', pubPost);
   pubCancel.addEventListener('click', pubClose);
   pubModal.addEventListener('click', function (e) { if (e.target === pubModal) pubClose(); });
@@ -352,6 +434,9 @@
   saveBtn.addEventListener('click', save);
   modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeModal(); pubClose(); } });
+
+  var initial = location.hash.replace('#', '');
+  select(initial && find(initial) ? initial : null);
 })();
 </script>
 {% endblock %}

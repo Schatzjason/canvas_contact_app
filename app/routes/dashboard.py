@@ -1538,7 +1538,7 @@ def discussion_helper():
                            posts=[_saved_post_json(p) for p in posts])
 
 
-def _upsert_saved_post(course_id, topic_id, entry_id, body, board_name):
+def _upsert_saved_post(course_id, topic_id, entry_id, body, board_name, title=None):
     """Create or update the saved copy of a Canvas entry; (created, post)."""
     post = SavedDiscussionPost.query.filter_by(course_id=course_id, entry_id=entry_id).first()
     created = post is None
@@ -1548,6 +1548,8 @@ def _upsert_saved_post(course_id, topic_id, entry_id, body, board_name):
     post.topic_id = topic_id
     post.body = body
     post.board_name = board_name
+    if title:  # re-saving without a title keeps the one already set
+        post.title = title
     module, linked = _module_for_topic(course_id, topic_id)
     post.module_name = module.get('name') if module else None
     post.module_name_id = linked.id if linked else None
@@ -1560,6 +1562,7 @@ def _saved_post_json(post):
     return {
         'entry_id': post.entry_id,
         'board_name': post.board_name,
+        'title': post.title or '',
         'module_name': post.module.name if post.module else post.module_name,
         'text': _html_to_text(post.body),
     }
@@ -1583,6 +1586,20 @@ def api_save_discussion_post():
     created, _post = _upsert_saved_post(
         course_id, topic_id, entry_id, body, (data.get('board_name') or '').strip())
     return {'ok': True, 'created': created}
+
+
+@bp.route('/api/discussion-posts/<int:entry_id>', methods=['PATCH'])
+def api_update_discussion_post(entry_id):
+    """Set a saved post's internal title (blank clears it)."""
+    post = SavedDiscussionPost.query.filter_by(entry_id=entry_id).first()
+    if post is None:
+        return {'ok': False, 'error': 'No such saved post.'}, 404
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data.get('title'), str):
+        return {'ok': False, 'error': 'title is required.'}, 400
+    post.title = data['title'].strip()[:255] or None
+    db.session.commit()
+    return {'ok': True, 'post': _saved_post_json(post)}
 
 
 @bp.route('/api/discussion-posts/<int:entry_id>', methods=['DELETE'])
@@ -1723,7 +1740,9 @@ def api_save_discussion_post_by_url():
     if not body:
         return {'ok': False, 'error': 'Canvas has no post with that entry_id in this discussion.'}, 404
 
-    created, post = _upsert_saved_post(course_id, topic_id, entry_id, body, title.strip())
+    internal_title = ((request.get_json(silent=True) or {}).get('title') or '').strip()[:255]
+    created, post = _upsert_saved_post(course_id, topic_id, entry_id, body, title.strip(),
+                                       title=internal_title)
     return {'ok': True, 'created': created, 'post': _saved_post_json(post)}
 
 
